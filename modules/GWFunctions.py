@@ -1,6 +1,5 @@
 import numpy as np
-import os
-from scipy import interpolate, integrate
+from scipy import integrate
 from . import PhysConst
 
 
@@ -64,53 +63,6 @@ def luminosity_distance(redshift):
     Dist_L = (1+redshift)*Dist_M
     """
     return Dist_L
-
-def import_detector(detector, interpolation = False):
-    """Import detector noise power specrtal density
-
-    Parameters
-    ----------
-        detector: string 
-            Detector name 'LIGO', 'LISA', 'CE' = 'CE2silicon', 'CE2silica' or 'ET'
-        interpolation: bool
-            Interpolate noise PSD
-
-    Returns
-    -------
-        Dictionary: Returns detector frequency array relative to detector psd and detector label. If interpolation = true, also returns interpolated function.
-    """
-    # choose noise
-    noise = {}
-    i_freq = 0
-    i_psd = 1
-    if detector == "LIGO":
-        file_name = "aLIGODesign.txt"
-        noise["label"] = "LIGO - Design sensitivity"
-    elif detector == "LISA":
-        file_name = "LISA_Strain_Sensitivity_range.txt"
-        noise["label"] = "LISA sensitivity"
-    elif detector == "ET":
-        i_psd = 3
-        file_name = "ET/ETDSensitivityCurve.txt"
-        noise["label"] = "ET_D sum sensitivity"
-    elif detector == "CE" or detector == "CE2silicon":
-        file_name = "CE/CE2silicon.txt"
-        noise["label"] = "CE silicon sensitivity"
-    elif detector == "CE2silica":
-        file_name = "CE/CE2silica.txt"
-        noise["label"] = "CE silica sensitivity"
-    else:
-        raise ValueError("Wrong detector option! Choose \"LIGO\", \"LISA\", \"CE\" = \"CE2silicon\", \"CE2silica\" or \"ET\"")
-    
-    file_path = os.path.join(os.getcwd(), "../detectors", file_name)
-    noise_file = np.genfromtxt(file_path)
-    noise["freq"], noise["psd"] = noise_file[:,i_freq], noise_file[:,i_psd]
-    
-    if interpolation == False:
-        return noise
-    else:
-        itp = interpolate.interp1d(noise["freq"], noise["psd"], "cubic")
-        return noise, itp
 
 def convert_units(Mass_QNM, redshift, mass_f = 1):
     """ Compute factors that converts times and frequencies of the QNM
@@ -206,7 +158,8 @@ def compute_qnm_fourier(f, A, phi, omega_r = None, omega_i = None, freq = None, 
         Select real or imaginary part of the QNM, by default "real"
     convention : str, optional
         Select convetion, FH reflects the waveform and EF cuts the waveform at time zero
-        see https://arxiv.org/abs/gr-qc/0512160 for definition of the conventions, by default "FH"
+        see https://arxiv.org/abs/gr-qc/0512160 for definition of the conventions. This
+        affects high frequency content due to spectral leakage, by default "FH"
 
     Returns
     -------
@@ -241,7 +194,28 @@ def compute_qnm_fourier(f, A, phi, omega_r = None, omega_i = None, freq = None, 
         raise ValueError("convention argument must be set to \"FH\" or \"EF\".")
 
 class QuasinormalMode:
+    """ Compute QNM in time and frequency domain.
+    """
     def __init__(self, amplitude, phase, omega_r, omega_i, mass = None, redshift = None, mass_f = 1):
+        """Define QNM parameter.
+
+        Parameters
+        ----------
+        amplitude : scalar
+            amplitude of the QNM.
+        phase : scalar
+            Phase shift of the QNM.
+        omega_r : scalar
+            Real part of the QNM frequency in code units
+        omega_i : scalar
+            Imaginary part of the QNM frequency in code units, by default None
+        mass : scalar, optional
+            Mass of the BH that emmited the QNM, by default None
+        redshift : scalar, optional
+            Cosmological redshift of the BH, by default None
+        mass_f : scalar, optional
+            Final mass factor relative to the binary total mass (mass = mass_f*(m1 + m2)), by default 1
+        """
         self.amplitude = amplitude
         self.phase = phase
         self.omega_r = omega_r 
@@ -257,6 +231,27 @@ class QuasinormalMode:
             self.time_convert = time_unit
     
     def qnm_time(self, t, part = None, units = "NR"):
+        """ Computed QNM in time domain.
+
+        Parameters
+        ----------
+        t : array_like
+            Time array to compute QNM;
+        part : string, optional
+            Choose real or imaginary part of the QNM, by default None
+        units : str, optional
+            Choose "NR" for code units (M_odot) or "SI" (seconds), by default "NR"
+
+        Returns
+        -------
+        array_like
+            Returns QNM in time domain.
+
+        Raises
+        ------
+        ValueError
+            "SI" units can only be choosen if mass and redshift were given.
+        """
         if units == "NR":
             return compute_qnm_time(t, self.amplitude, self.phase, omega_r = self.omega_r, omega_i = self.omega_i, part = part)
         elif units == "SI":
@@ -266,6 +261,27 @@ class QuasinormalMode:
                 return self.amplitude_scale*compute_qnm_time(t, self.amplitude, self.phase, freq = self.frequency, tau = self.decay_time, part = part)
         else: raise ValueError("Units must be set to \"NR\" or \"SI\"!")
     def qnm_fourier(self, f, part = "real", convention = "FH", freqs_unit = "SI"):
+        """Compute QNM in frequency domain.
+
+        Parameters
+        ----------
+        f : array_like
+            Frequency array to comput QNM.
+        part : str, optional
+            Choose "real" or "imaginary" part (polarization) of the QNM, by default "real"
+        convention : str, optional
+            Select convetion, FH reflects the waveform and EF cuts the waveform at time zero
+            see https://arxiv.org/abs/gr-qc/0512160 for definition of the conventions. This 
+            affects high frequency content due to spectral leakage, by default "FH"
+        freqs_unit : str, optional
+            Information about frequency array unit, set "NR" for code units (1/M_odot). This
+            also defines the units of the returned QNM, by default "SI"
+
+        Returns
+        -------
+        array_like
+            Returns QNM in frequency domain.
+        """
         f = np.asanyarray(f)
         if freqs_unit == "SI":
             if self.frequency is None:

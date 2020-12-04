@@ -1,6 +1,7 @@
 """
 Physical constants in SI units and in seconds
 """
+
 class Constants:
     # Gravitational constant
     Gconst = 6.67259e-11  # m^3/(kg*s^2)
@@ -15,6 +16,13 @@ class UnitsToSeconds:
     """
     Convert desired unit to seconds
     """
-    const = Constants()
-    tSun = const.MSun*const.Gconst / const.clight**3  # from Solar mass to seconds
-    Dist = 1.0e6*const.parsec / const.clight  # from Mpc to seconds
+    # const = Constants()
+    tSun = Constants.MSun*Constants.Gconst / Constants.clight**3  # from Solar mass to seconds
+    Dist = 1.0e6*Constants.parsec / Constants.clight  # from Mpc to seconds
+
+
+if __name__ == "__main__":
+    # const = Constants()
+    print(UnitsToSeconds.tSun)
+
+
