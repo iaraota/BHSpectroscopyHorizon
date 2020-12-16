@@ -260,6 +260,10 @@ class QuasinormalMode:
             else: 
                 return self.amplitude_scale*compute_qnm_time(t, self.amplitude, self.phase, freq = self.frequency, tau = self.decay_time, part = part)
         else: raise ValueError("Units must be set to \"NR\" or \"SI\"!")
+
+    def qnm_time_array(self, t):
+        return t*self.time_convert
+        
     def qnm_fourier(self, f, part = "real", convention = "FH", freqs_unit = "SI"):
         """Compute QNM in frequency domain.
 

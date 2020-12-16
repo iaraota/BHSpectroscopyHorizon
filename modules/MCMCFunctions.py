@@ -77,3 +77,31 @@ def log_probability_qnm(theta, log_prior_function, model_function, data, frequen
     if not np.isfinite(log_prior):
         return -np.inf
     return log_prior + log_likelihood_qnm(theta, model_function, data, frequency, noise_psd)
+
+def log_probability(theta, log_prior_function, log_likelihood, model_function, data, frequency, noise_psd):
+    """Compute the logarithm of the probability posterior distribution.
+
+    Parameters
+    ----------
+    theta : array_like
+        Parameters of the model.
+    log_prior_function : function
+        Function for priors distribuition.
+    model_function : function
+        Model function.
+    data : array_like
+        Data array.
+    frequency : array_like
+        Frequency array relative to data and noise.
+    noise_psd : array_like
+        Noise power spectral density, used to compute inner product. 
+
+    Returns
+    -------
+    float
+        Returns log of the posteiror probability.
+    """
+    log_prior = log_prior_function(theta)
+    if not np.isfinite(log_prior):
+        return -np.inf
+    return log_prior + log_likelihood(theta, model_function, data, frequency, noise_psd)
