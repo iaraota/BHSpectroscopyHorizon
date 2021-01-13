@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import corner
 from scipy.optimize import minimize
-from scipy import interpolate
+from scipy import interpolate, stats
 from modules import GWFunctions, MCMCFunctions, ImportData, PlotFunctions
 from multiprocessing import cpu_count
 
@@ -180,6 +180,7 @@ def parameter_estimation_qnm_2modes(M_f, redshift, q_mass, detector, convention 
 class FreqMCMC:
 
     def __init__(self, modes, M_f, redshift, q_mass, detector, convention = "FH"):
+        np.random.seed(1234)
         self.M_f = M_f
         self.qnm_pars, self.mass_f = ImportData.import_simulation_qnm_parameters(q_mass)
         self.redshift = redshift
@@ -189,33 +190,63 @@ class FreqMCMC:
         self.time_convert, self.amplitude_scale = GWFunctions.convert_units(M_f, redshift, self.mass_f)
 
         self.modes = modes
+
         self._compute_qnm_modes()
         self._random_noise()
-        self._inject_data()
-        self._theta_true()
-        self._maximize_loglike()
-        self._prior_and_logpdf()
+
 
         self.nwalkers = 100
         self.nsteps = 2000
         self.thin = 30
 
-        self.run_mcmc()
+        # self.nwalkers = 32
+        # self.nsteps = 500
+        # self.thin = 10
 
-    def run_mcmc(self):
+
+    def pdf_two_models(self):
+        self.modes_data = self.modes
+        self.modes_model = self.modes
+        self._inject_data()
+        self._theta_true()
+        self._maximize_loglike()
+        self._prior_and_logpdf()
+
+
+        self.plot_seaborn()
+
+        self.modes_model = [self.modes[0]]
+        self._theta_true()
+        self._maximize_loglike()
+        self._prior_and_logpdf()
+        self.plot_seaborn()
+
+        self.modes_data = [self.modes[0]]
+        self.modes_model = self.modes
+        self._inject_data()
+        self._theta_true()
+        self._maximize_loglike()
+        self._prior_and_logpdf()
+
+
+        self.plot_seaborn()
+
+        self.modes_model = [self.modes[0]]
+        self._theta_true()
+        self._maximize_loglike()
+        self._prior_and_logpdf()
+        self.plot_seaborn()
+
+
+    def _compute_pdf(self):
         ndim = len(self.initial)
         pos = (self.max_loglike + 1e-4 * np.random.randn(self.nwalkers, ndim))
 
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.log_pdf)
         sampler.run_mcmc(pos, self.nsteps, progress=True)
         self.samples = sampler.get_chain()
-        self.flat_samples = sampler.get_chain(discard=int(self.nsteps/2), thin=15, flat=True)
+        self.flat_samples = sampler.get_chain(discard=int(self.nsteps/2), thin=self.thin, flat=True)
 
-        # for i in range(len(self.modes)):
-        #     self.samples[:, 2 + 4*i] = [x*1e2 for x in self.samples[:, 2 + 4*i]]
-        #     self.samples[:, 3 + 4*i] = [x*1e-3 for x in self.samples[:, 3 + 4*i]]
-        #     self.flat_samples[:, 2 + 4*i] = [x*1e2 for x in self.flat_samples[:, 2 + 4*i]]
-        #     self.flat_samples[:, 3 + 4*i] = [x*1e-3 for x in self.flat_samples[:, 3 + 4*i]]
 
     def plot_walks(self):
         self._plot_labels()
@@ -231,11 +262,12 @@ class FreqMCMC:
         plt.show()
     
     def plot_seaborn(self):
+        self._compute_pdf()
         self._plot_parameters()
         self._plot_labels()
         df = pd.DataFrame(self.flat_samples, columns=self.labels)
         theta_true = self.theta_true
-        for i in range(len(self.modes)):
+        for i in range(len(self.modes_model)):
             df[self.labels[2 + 4*i]] *= 1e2
             theta_true[2 + 4*i] *= 1e2
             # df[self.labels[3 + 4*i]] *= 1e-3
@@ -249,8 +281,6 @@ class FreqMCMC:
         # fig.map_lower(sns.kdeplot, levels = 3)
 
         for i in range(len(theta_true)):
-            # true values
-            fig.axes[i][i].axvline(x = theta_true[i], color="tab:red", ls="--")
             # highest probability density region
             # fig.axes[i][i].axvline(x = hpds[self.labels[i]][0], color="tab:blue", ls = "--")
             # fig.axes[i][i].axvline(x = hpds[self.labels[i]][1], color="tab:blue", ls = "--")
@@ -260,21 +290,25 @@ class FreqMCMC:
             # fig.axes[i][i].axvline(x = df[self.labels[i]].quantile(.5), color="tab:blue", ls=":")
             fig.axes[i][i].axvline(x = df[self.labels[i]].quantile(.95), color="tab:blue", ls="-")
 
+            # true values
+            fig.axes[i][i].axvline(x = theta_true[i], color="tab:red", ls="--", lw=3)
+
             # Show mean and errors
             n_round = 3
             if self.labels[i][1] == "f" or self.labels[i][2] == "t":
                 n_round = 2
 
             fig.axes[i][i].title.set_text(r"${{{0}}}^{{+{1}}}_{{{2}}}$".format(
-                    np.round(df[self.labels[i]].quantile(.5),n_round),
-                    np.round(df[self.labels[i]].quantile(.95) - df[self.labels[i]].quantile(.5),n_round),
-                    np.round(df[self.labels[i]].quantile(.05) - df[self.labels[i]].quantile(.5),n_round)))
+                np.round(df[self.labels[i]].quantile(.5),n_round),
+                np.round(df[self.labels[i]].quantile(.95) - df[self.labels[i]].quantile(.5),n_round),
+                np.round(df[self.labels[i]].quantile(.05) - df[self.labels[i]].quantile(.5),n_round)))
 
         label_modes = ""
         for mode in self.modes:
             label_modes +="_" + mode[1]+mode[3]+mode[5]
         fig.tight_layout()
-        plt.savefig("figs/2modes"+ str(self.M_f) + "_" + str(self.redshift) + "_"
+        plt.savefig("figs/"+str(len(self.modes_data))+"data"+str(len(self.modes_model))+"model"
+                    + str(self.M_f) + "_" + str(self.redshift) + "_"
                     + self.detector["label"] + label_modes + ".pdf", dpi = 360)
         # plt.show()
 
@@ -287,7 +321,7 @@ class FreqMCMC:
 
     def _plot_labels(self):
         self.labels = []
-        for mode in self.modes:
+        for mode in self.modes_model:
             mode = mode[1]+mode[3]+mode[5]
             # if mode == "(2,2,1) I" or mode == "(2,2,1) II":
             #     mode = "(2,2,1)"
@@ -302,7 +336,7 @@ class FreqMCMC:
         SMALL_SIZE = 20
         MEDIUM_SIZE = 25
         BIGGER_SIZE = 35
-        
+
         plt.rc("font", size=SMALL_SIZE)          # controls default text sizes
         plt.rc("axes", titlesize=MEDIUM_SIZE)     # fontsize of the axes title
         plt.rc("axes", labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
@@ -312,8 +346,8 @@ class FreqMCMC:
         plt.rc("figure", titlesize=BIGGER_SIZE)
 
     def _inject_data(self):
-        self.data = self.noise
-        for mode in self.modes:
+        self.data = np.copy(self.noise)
+        for mode in self.modes_data:
             self.data += self.qnm_modes[mode].qnm_f["real"]
 
     def _random_noise(self):
@@ -336,7 +370,7 @@ class FreqMCMC:
 
     def _theta_true(self):
         self.theta_true = []
-        for mode in self.modes:
+        for mode in self.modes_model:
             self.theta_true.extend([self.qnm_modes[mode].amplitude, 
                 float(self.qnm_modes[mode].phase),
                 self.qnm_modes[mode].frequency*1e-2,
@@ -344,7 +378,7 @@ class FreqMCMC:
 
     def model_function(self, theta):
         h_model = 0
-        for i in range(len(self.modes)-1):
+        for i in range(len(self.modes_model)):
             A, phi, freq, tau = theta[0 + 4*i: 4 + 4*i]
             freq *= 1e2
             tau *= 1e-3
@@ -355,6 +389,59 @@ class FreqMCMC:
                 part = "real", convention = self.ft_convention)
         return h_model
 
+    def likelihood_ratio_test(self):
+        self.modes_data = self.modes
+        self.modes_model = self.modes
+        self._inject_data()
+        self._theta_true()
+        self._maximize_loglike()
+
+        likelihood = {"2data2model": MCMCFunctions.log_likelihood_qnm(self.max_loglike,
+            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+            )}
+
+        self.modes_model = [self.modes[0]]
+        
+        self._theta_true()
+        self._maximize_loglike()
+
+        likelihood["2data1model"] = MCMCFunctions.log_likelihood_qnm(self.max_loglike,
+            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+            )
+
+        self.modes_data = [self.modes[0]]
+
+        self.modes_model = self.modes
+        self._inject_data()
+        self._theta_true()
+        self._maximize_loglike()
+
+        # likelihood = {"1data2model": MCMCFunctions.log_likelihood_qnm(self.max_loglike,
+        #     self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+        #     )}
+        likelihood["1data2model"] = MCMCFunctions.log_likelihood_qnm(self.max_loglike,
+            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+            )
+
+        self.modes_model = [self.modes[0]]
+        self._theta_true()
+        self._maximize_loglike()
+
+        likelihood["1data1model"] = MCMCFunctions.log_likelihood_qnm(self.max_loglike,
+            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+            )
+
+
+        log_likelihood_ratio = {
+            "2 modes": 2*(likelihood["2data2model"] - likelihood["2data1model"]),
+            "1 mode": 2*(likelihood["1data2model"] - likelihood["1data1model"])}
+        print(log_likelihood_ratio)
+        print("data: 1 mode")
+        print("2modes/1mode: " + str(stats.chi2.cdf(log_likelihood_ratio["1 mode"], 4)))
+        print("1mode/2modes: " +str(stats.chi2.sf(log_likelihood_ratio["1 mode"], 4)))
+        print("data: 2 modes")
+        print("2modes/1mode: " + str(stats.chi2.cdf(log_likelihood_ratio["2 modes"], 4)))
+        print("1mode/2modes: " + str(stats.chi2.sf(log_likelihood_ratio["2 modes"], 4)))
     def _maximize_loglike(self):
         self.initial = (self.theta_true +
                     np.random.randn(len(self.theta_true))*np.floor(np.log10(self.theta_true))*1e-4)
@@ -366,7 +453,7 @@ class FreqMCMC:
     def _prior_and_logpdf(self):
         limit_min = []
         limit_max = []
-        for i in range(len(self.modes)):
+        for i in range(len(self.modes_model)):
             limit_min.extend([0., 0., self.theta_true[2 + 4*i]/100, self.theta_true[3 + 4*i]/100])
             limit_max.extend([100., 2*np.pi, self.theta_true[2 + 4*i]*100, self.theta_true[3 + 4*i]*100])
 
@@ -414,9 +501,21 @@ def hpd(trace, mass_frac) :
     return np.array([d[min_int], d[min_int+n_samples]])
 
 if __name__ == '__main__':
+    m_f = 5e2
+    z = 0.1
+    q = 1.5
+    detector = "LIGO"
     # run_mcmc = FreqMCMC(["(3,3,0)"], 63, 0.1, 1.5, "LIGO", "FH")
     # run_mcmc = FreqMCMC(["(2,2,0)","(2,2,1) I"], 63, 0.1, 1.5, "LIGO", "FH")
-    run_mcmc = FreqMCMC(["(2,2,0)","(2,2,1) I"], 5e2, 1 , 1.5, "LIGO", "FH")
-    run_mcmc.plot_seaborn()
+    run_mcmc = FreqMCMC(["(2,2,0)", "(4,4,0)"], m_f, z, q, detector, "FH")
+    # run_mcmc.pdf_two_models()
+    run_mcmc.likelihood_ratio_test()
+    run_mcmc = FreqMCMC(["(2,2,0)", "(3,3,0)"], m_f, z, q, detector, "FH")
+    # run_mcmc.pdf_two_models()
+    run_mcmc.likelihood_ratio_test()
+    run_mcmc = FreqMCMC(["(2,2,0)", "(2,2,1) I"], m_f, z, q, detector, "FH")
+    run_mcmc.likelihood_ratio_test()
+    #run_mcmc.pdf_two_models()
+    # run_mcmc.plot_seaborn()
     # run_mcmc2 = FreqMCMC(["(2,2,0)","(2,2,1) I"], 5e2, 0.3, 1.5, "LIGO", "FH")
     # run_mcmc2.plot_seaborn()

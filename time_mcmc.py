@@ -11,6 +11,7 @@ from multiprocessing import cpu_count
 from scipy import signal
 import pymc3 as pm
 
+
 def detector_time_domain(detector, corr = False):
     # import detector data and interpolation function
     detector_data, itp_detector = ImportData.import_detector(detector, True)
@@ -25,6 +26,7 @@ def detector_time_domain(detector, corr = False):
 
     # set psd from 0 to f_min to max(psd)
     # freqs = np.arange(0, f_max + f_min, df)
+    # psd_max = 0
     # index_fmin = np.where(freqs<f_min)[0]    
     # index_fmax = np.where(freqs>f_max)[0]    
     # detector_psd =  np.concatenate((np.ones(len(index_fmin))*psd_max, 
@@ -36,7 +38,7 @@ def detector_time_domain(detector, corr = False):
     if corr == False:
         detector_psd = detector_psd*np.exp(1j*np.random.uniform(low = -np.pi, high = np.pi,size = (len(freqs),)))
     
-    else: detector_psd = detector_psd**2
+    else: detector_psd = detector_psd**2/2
     # make the sprectrum conjugate symmetric
     detector_psd = np.concatenate((detector_psd,np.conj(detector_psd[::-1][0:-1])))
     freqs = np.concatenate((-freqs[::-1], freqs))
@@ -51,14 +53,14 @@ def detector_time_domain(detector, corr = False):
 def parameter_estimation_qnm(M_f, redshift, q_mass, detector, convention = "FH", model = 1):
     detector_data = ImportData.import_detector(detector, False)
 
+    autocorr, times, dt = detector_time_domain(detector, True)
+    autocorr = np.real(autocorr)
     noise, times, dt = detector_time_domain(detector)
-    # autocorr, times, dt = detector_time_domain(detector, True)
-    # autocorr = np.real(autocorr)
     noise = np.real(noise)
-    autocorr = signal.convolve(noise, noise[::-1], mode='same')*dt
+    # autocorr = signal.convolve(noise, noise[::-1], mode='same')*dt
     # plt.plot(times, noise)
     # plt.plot(times, autocorr)
-    # window = signal.tukey(len(autocorr), 1)
+    # window = signal.tukey(len(autocorr), 0)
     # plt.loglog(np.fft.fftfreq(len(autocorr), dt),np.sqrt(np.abs(np.fft.fft(autocorr*window)*dt)))
     # plt.loglog(detector_data['freq'], detector_data['psd'])
     # plt.show()
@@ -89,22 +91,21 @@ def parameter_estimation_qnm(M_f, redshift, q_mass, detector, convention = "FH",
     # autocorr = signal.convolve(noise, noise[::-1], mode='same', method="direct")*dt
     
 
-    window = signal.tukey(len(autocorr), 0)
-    plt.loglog(np.fft.fftfreq(len(autocorr), dt),np.sqrt(np.abs(np.fft.fft(autocorr*window)*dt)))
-    plt.loglog(detector_data['freq'], detector_data['psd'])
-    plt.show()
+    # window = signal.tukey(len(autocorr), 0)
+    # plt.loglog(np.fft.fftfreq(len(autocorr), dt),np.sqrt(np.abs(np.fft.fft(autocorr*window)*dt)))
+    # plt.loglog(detector_data['freq'], detector_data['psd'])
+    # plt.show()
     def model_function(theta, time_array): 
-        A, phi, freq, tau = theta
-        return strain_unit*GWFunctions.compute_qnm_time(time_array, A, phi, freq=freq, tau = tau, part = "real")
-        # A, phi, omega_r, omega_i = theta
-        # freq = omega_r/2/np.pi/time_unit
-        # tau = time_unit/omega_i        
-        # return strain_unit*A*np.exp(-time_array/tau)*np.cos(2*np.pi*freq*time_array - phi)
+        # A, phi, freq, tau = theta
+        # return strain_unit*GWFunctions.compute_qnm_time(time_array, A, phi, freq=freq, tau = tau*1e-3, part = "real")
+        A, phi, omega_r, omega_i = theta
+        freq = omega_r/2/np.pi/time_unit
+        tau = time_unit/omega_i        
+        return strain_unit*A*np.exp(-time_array/tau)*np.cos(2*np.pi*freq*time_array - phi)
 
-    print(qnm_modes[mode].frequency)
     # maximize likelihood
-    theta_true = np.array([qnm_modes[mode].amplitude, qnm_modes[mode].phase, qnm_modes[mode].frequency, qnm_modes[mode].decay_time])
-    # theta_true = np.array([qnm_modes[mode].amplitude, qnm_modes[mode].phase, qnm_modes[mode].omega_r, qnm_modes[mode].omega_i])
+    # theta_true = np.array([qnm_modes[mode].amplitude, qnm_modes[mode].phase, qnm_modes[mode].frequency, qnm_modes[mode].decay_time*1e3])
+    theta_true = np.array([qnm_modes[mode].amplitude, qnm_modes[mode].phase, qnm_modes[mode].omega_r, qnm_modes[mode].omega_i])
     initial = theta_true + np.random.randn(len(theta_true))*np.floor(np.log10(theta_true))*1e-4
 
     
@@ -113,8 +114,11 @@ def parameter_estimation_qnm(M_f, redshift, q_mass, detector, convention = "FH",
         dmm  = data - model
         # conv = signal.convolve(1/autocorr, dmm, mode = "same", method="direct")*[times[1] - times[0]]
         # return -0.5*np.trapz(dmm*conv, times)
-        conv = signal.convolve(1/autocorr, dmm**2, mode = "same", method = "direct")*[times[1] - times[0]]
-        return -0.5*np.trapz(conv, times)
+        # conv = signal.convolve(autocorr, 1/dmm, mode = "same", method="direct")*[times[1] - times[0]]
+        # return -0.5*np.trapz(dmm/conv, times)
+        # conv = signal.convolve(1/autocorr, dmm**2, mode = "same", method = "direct")*[times[1] - times[0]]
+        # return -0.5*np.trapz(conv, times)
+        return -0.5*np.trapz(dmm**2, times)
     
     
     nll = lambda theta: -log_likelihood_time(theta, model_function, injected_data, times, autocorr)
@@ -132,10 +136,10 @@ def parameter_estimation_qnm(M_f, redshift, q_mass, detector, convention = "FH",
     # limit_max = np.array([1, 2*np.pi, theta_true[2]*10, theta_true[3]*10])
     # prior_f = lambda theta: MCMCFunctions.noninfor_log_prior(theta, limit_min, limit_max)
     def prior_f(theta):
-        A, phi, freq, tau = theta
-        if 0. < A < 1. and 0. < phi <= 2*np.pi and  theta_true[2]/5 < freq < theta_true[2]*5 and theta_true[3]/5 < tau < theta_true[3]*5:
-        # A, phi, omega_r, omega_i = theta
-        # if 0. < A < 1. and 0. < phi <= 2*np.pi and 0 < omega_r < 1 and 0.01 < omega_i < 0.5:
+        # A, phi, freq, tau = theta
+        # if 0. < A < 1. and 0. < phi <= 2*np.pi and  theta_true[2]/5 < freq < theta_true[2]*5 and theta_true[3]/5 < tau < theta_true[3]*5:
+        A, phi, omega_r, omega_i = theta
+        if 0. < A < 1. and 0. < phi <= 2*np.pi and 0 < omega_r < 1 and 0.01 < omega_i < 0.5:
             return 0.0
         return -np.inf
 
@@ -167,12 +171,12 @@ def parameter_estimation_qnm(M_f, redshift, q_mass, detector, convention = "FH",
         ax.yaxis.set_label_coords(-0.1, 0.5)
 
     axes[-1].set_xlabel("step number")
-    fig = corner.corner(flat_samples, labels=labels, truths=theta_true)
-    fig.suptitle(detector+", $M = {0}, z = {1}$".format(PlotFunctions.scientific_format(M_f, precision = 1), redshift))
+    # fig = corner.corner(flat_samples, labels=labels, truths=theta_true)
+    # fig.suptitle(detector+", $M = {0}, z = {1}$".format(PlotFunctions.scientific_format(M_f, precision = 1), redshift))
 
-    sns.jointplot(flat_samples[:,2], flat_samples[:,3]*1e3, x="freq (Hz)",y="tau (ms)", kind="kde", levels = 2)
+    # sns.jointplot(flat_samples[:,2], flat_samples[:,3]*1e3, x="freq (Hz)",y="tau (ms)", kind="kde", levels = 2)
     plt.show()
-    return sampler, flat_samples, theta_true
+    # return sampler, flat_samples, theta_true
 
 parameter_estimation_qnm(63, 0.1, 1.5, "LIGO")
 # parameter_estimation_qnm(1e5, 0.01, 1.5, "CE")
