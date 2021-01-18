@@ -45,6 +45,9 @@ def import_detector(detector, interpolation = False):
     file_path = os.path.join(os.getcwd(), "../detectors", file_name)
     noise_file = np.genfromtxt(file_path)
     noise["freq"], noise["psd"] = noise_file[:,i_freq], noise_file[:,i_psd]
+    # make noise arrays immutable arrays
+    noise["freq"].flags.writeable = False
+    noise["psd"].flags.writeable = False
     
     if interpolation == False:
         return noise
