@@ -1,4 +1,4 @@
-
+import time
 import emcee
 import numpy as np
 import pandas as pd
@@ -7,6 +7,7 @@ import seaborn as sns
 import corner
 from scipy.optimize import minimize
 from scipy import stats
+import scipy.integrate as integrate
 from modules import GWFunctions, MCMCFunctions, ImportData, PlotFunctions
 
 class SourceData:
@@ -127,7 +128,7 @@ class MCMC(SourceData):
         """
         self.theta_true = []
         for mode in self.modes_model:
-            self.theta_true.extend([self.qnm_modes[mode].amplitude, 
+            self.theta_true.extend([self.qnm_modes[mode].amplitude,
                 float(self.qnm_modes[mode].phase),
                 self.qnm_modes[mode].frequency*1e-2,
                 self.qnm_modes[mode].decay_time*1e3])
@@ -256,7 +257,7 @@ class PlotPDF(MCMC):
 
 
         self.plot_seaborn()
-
+        
         self.modes_model = [self.modes[0]]
         self._theta_true()
         self._maximize_loglike()
@@ -278,7 +279,7 @@ class PlotPDF(MCMC):
         self._maximize_loglike()
         self._prior_and_logpdf()
         self.plot_seaborn()
-
+        
     def plot_walks(self):
         self._plot_labels()
         fig, axes = plt.subplots(len(self.theta_true), figsize=(10, 7), sharex=True)
@@ -297,7 +298,7 @@ class PlotPDF(MCMC):
         self._plot_parameters()
         self._plot_labels()
         df = pd.DataFrame(self.flat_samples, columns=self.labels)
-        theta_true = self.theta_true
+        theta_true = list(self.theta_true)
         for i in range(len(self.modes_model)):
             df[self.labels[2 + 4*i]] *= 1e2
             theta_true[2 + 4*i] *= 1e2
@@ -370,6 +371,34 @@ class PlotPDF(MCMC):
         plt.rc("figure", titlesize=BIGGER_SIZE)
 
 
+class Bayes(MCMC):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def compute(self):
+        self.modes_data = self.modes
+        self.modes_model = [self.modes[0]]
+        self._inject_data()
+        self._theta_true()
+        # self._prior_and_logpdf()
+        # prior = self.prior_function
+
+        loglike = lambda A, phi,f, tau: MCMCFunctions.log_likelihood_qnm((A, phi, f, tau),
+            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+            )
+        start = time.process_time()
+        result = integrate.nquad(loglike, 
+            [[0.,1],
+            [0., 2*np.pi],
+            [self.theta_true[2]/2, self.theta_true[2]*2],
+            [self.theta_true[3]/2, self.theta_true[3]*2]])
+        print(result)
+
+        print(time.process_time() - start)
+
+        # [0., 0., self.theta_true[2]/100, self.theta_true[3]/100], 
+        # [100., 2*np.pi, self.theta_true[2]*100, self.theta_true[3]*100])
 
 def hpd(trace, mass_frac) :
     """
@@ -409,10 +438,10 @@ def hpd(trace, mass_frac) :
     return np.array([d[min_int], d[min_int+n_samples]])
 
 if __name__ == '__main__':
-    np.random.seed(1234)
-    m_f = 5e2
-    z = 0.1
-    q = 1.5
+    # np.random.seed(1234)
+    m_f = 142
+    z = 0.8
+    q = 1.0
     detector = "LIGO"
     modes = ("(2,2,0)", "(2,2,1) I")
     # print(source)
@@ -434,3 +463,6 @@ if __name__ == '__main__':
     # run_mcmc.plot_seaborn()
     # run_mcmc2 = FreqMCMC(["(2,2,0)","(2,2,1) I"], 5e2, 0.3, 1.5, "LIGO", "FH")
     # run_mcmc2.plot_seaborn()
+
+    # bayes = Bayes(detector, modes, m_f, z, q, "FH")
+    # bayes.compute()
