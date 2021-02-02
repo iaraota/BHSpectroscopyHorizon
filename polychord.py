@@ -15,44 +15,30 @@ class Polychord(SourceData):
     """Compute posterior probability densities for
     quasinormal modes in the frequency domain."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, modes_data:list, modes_model:list, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.modes_data = self.modes
-        self.modes_model = self.modes
-        self._inject_data(self.modes_data)
+        self.modes_data = modes_data
+        self.modes_model = modes_model
+        self.inject_data(self.modes_data) # construct self.data
         self._theta_true()
 
-    def run_all(self):
-        # self.modes_data = self.modes
-        # self._inject_data(self.modes_data)
-
-        # self.modes_model = self.modes
-        # self._theta_true()
-        self.plot_posterior()
-        
-        # self.modes_model = [self.modes[0]]
-        # self._theta_true()
-        # self.plot_posterior()
-
-
-        # self.modes_data = [self.modes[0]]
-        # self._inject_data(self.modes_data)
-
-        # self.modes_model = self.modes
-        # self._theta_true()
-        # self.plot_posterior()
-
-        # self.modes_model = [self.modes[0]]
-        # self._theta_true()
-        # self.plot_posterior()
 
     def run_sampler(self):
+        """Runs PolyChord computation to compute the evidence and the
+            posterior probability distribuitions.
+
+        Returns
+        -------
+        list
+            0: returns polychord results
+            1 (str): saved filename
+        """
         nDims = len(self.theta_true)
         nDerived = 1
         
         path = "z-"+str(self.redshift)+"_M-"+str(self.final_mass)
-        for mode in self.modes:
+        for mode in self.modes_data:
             path += '-'
             mode = mode[1]+mode[3]+mode[5]
             path += mode
@@ -75,10 +61,9 @@ class Polychord(SourceData):
         
         settings = PolyChordSettings(nDims, nDerived)
         settings.file_root = filename
-        settings.nlive = 100
+        settings.nlive = 200
         settings.do_clustering = True
         settings.read_resume = False
-
 
         output = pypolychord.run_polychord(
             self.loglikelihood, 
@@ -92,6 +77,8 @@ class Polychord(SourceData):
         return output, filename
 
     def plot_posterior(self):
+        """Plot the posterior probability distribuition for the model parameters.
+        """
         output, filename = self.run_sampler()
 
         plt.rcParams["mathtext.fontset"] = "cm"
@@ -107,30 +94,22 @@ class Polychord(SourceData):
         g.triangle_plot(posterior, pars, filled=True, markers = markers)
         g.export('chains/'+filename+'.pdf')
 
-
-    def loglikelihood(self, theta):
-        return MCMCFunctions.log_likelihood_qnm(theta,
-            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
-            ), sum(theta**2)
-
     def dumper(self, live, dead, logweights, logZ, logZerr):
         print("Last dead point:", dead[-1])
-
 
     def prior(self, hypercube):
         """ Uniform prior from [true/100,true*100]. """
         cube = np.array(hypercube)
         for i in range(len(self.modes_model)):
-            cube[0+4*i] = UniformPrior(0, 10)(cube[0 + 4*i])
-            cube[1+4*i] = UniformPrior(0, 2*np.pi)(cube[1 + 4*i])
+            cube[0+4*i] = UniformPrior(0.0, 10)(cube[0 + 4*i])
+            cube[1+4*i] = UniformPrior(0.0, 2*np.pi)(cube[1 + 4*i])
             # cube[2+4*i] = UniformPrior(self.theta_true[2 + 4*i]/100, self.theta_true[2 + 4*i]*100)(cube[2 + 4*i])
-            cube[2+4*i] = UniformPrior(0, 5000)(cube[2 + 4*i])
+            cube[2+4*i] = UniformPrior(0.0, 5000)(cube[2 + 4*i])
             cube[3+4*i] = UniformPrior(self.theta_true[3 + 4*i]/100, self.theta_true[3 + 4*i]*100)(cube[3 + 4*i])
         return cube
 
-
     def _theta_true(self):
-        """Injected parameters.
+        """Generate a list of the true injected parameters.
         """
         self.theta_true = []
         for mode in self.modes_model:
@@ -141,6 +120,8 @@ class Polychord(SourceData):
         self.theta_true = tuple(self.theta_true)
 
     def _parameters_labels(self):
+        """Generate model parameters labels used in GetDist plots.
+        """
         self.labels = []
         i = 0
         for mode in self.modes_model:
@@ -155,6 +136,25 @@ class Polychord(SourceData):
                 ])
             i+=1
         self.labels += [('r*', 'r')]
+
+    def loglikelihood(self, theta:list):
+        """Generate the likelihood function for QNMs.
+
+        Parameters
+        ----------
+        theta : array_like
+            Model parameters.
+
+        Returns
+        -------
+        list
+            0 (function): Likelihood for QNMs as a function of parameters theta.
+            1 (float): square sum of the parameters.
+        """
+
+        return MCMCFunctions.log_likelihood_qnm(theta,
+            self.model_function, self.data, self.detector["freq"], self.detector["psd"]
+            ), sum(theta**2)
 
     def model_function(self, theta:list):
         """Generate waveform model function of QNMs.
@@ -190,9 +190,9 @@ if __name__ == '__main__':
     z = 0.1
     q = 1.5
     detector = "LIGO"
-    modes = ("(2,2,0)", "(2,2,1) I")
+    modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ("(2,2,0)", "(4,4,0)")
     # modes = ["(2,2,0)"]
-    teste = Polychord(detector, modes, m_f, z, q, "FH")
-    teste.run_all()
+    teste = Polychord(modes, modes, detector, m_f, z, q, "FH")
+    teste.plot_posterior()
     print(datetime.now()-start)
