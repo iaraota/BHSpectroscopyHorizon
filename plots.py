@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import pandas as pd
-import getdist
-import getdist.plots
+# import getdist
+# import getdist.plots
 
 plt.rcParams["mathtext.fontset"] = "cm"
 plt.rcParams["font.family"] = "STIXGeneral"
@@ -22,11 +22,13 @@ plt.rc("ytick", labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
 plt.rc("legend", fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc("figure", titlesize=BIGGER_SIZE)
 
-# posterior = np.genfromtxt("chains/qnm_model-220-221_data-220-221.txt", usecols = (2,3,4,5,6,7,8,9))
-# weight = np.genfromtxt("chains/qnm_model-220-221_data-220-221.txt", usecols = (0))
+file = "/home/iaraota/Doutorado/Julia/mcmc_qnm/chains/z-1_M-500/qnm_data-220_model-220.txt"
+
+posterior = np.genfromtxt(file, usecols = (2,3,4,5))
+weight = np.genfromtxt(file, usecols = (0))
 # plt.hist(posterior[:,1], color = "red", alpha = 0.4, bins = 100)
 # plt.hist(posterior[:,1], weights = weight, bins = 500)
-# corner.corner(posterior[:,], weights = weight, plot_contours = True,range=[(-1.4, -0.6), (3.4,6.0), (-1.2,0.3)], smooth = True)
+corner.corner(posterior, weights = weight)#, plot_contours = True,range=[(-1.4, -0.6), (3.4,6.0), (-1.2,0.3)], smooth = True)
 # df = pd.DataFrame(posterior)
 # df = df.sample(weights = weight)
 # 
@@ -34,23 +36,23 @@ plt.rc("figure", titlesize=BIGGER_SIZE)
 
 # sns.distplot(posterior[:,0], hist_kws={'weights': weight}, kde=False)
 # plt.plot(posterior[:,0]*weight)
-# plt.show()
+plt.show()
 
-samples = getdist.loadMCSamples("chains/qnm_model-220_data-220")
-print(samples.samples[:,])
-g = getdist.plots.getSubplotPlotter()
-g.settings.axes_fontsize=SMALL_SIZE
-g.settings.axes_labelsize=SMALL_SIZE
-g.settings.linewidth = 3
-g.settings.linewidth_contour = 3
-g.settings.num_plot_contours = 2
-theta_true = [0.415, 2.3, 0.3085, 34] 
-pars = []
-markers = {}
-for i in range(len(theta_true)):
-    pars.append('p'+str(i))
-    markers['p'+str(i)] = theta_true[i]
+# samples = getdist.loadMCSamples(file)
+# print(samples.samples[:,])
+# g = getdist.plots.getSubplotPlotter()
+# g.settings.axes_fontsize=SMALL_SIZE
+# g.settings.axes_labelsize=SMALL_SIZE
+# g.settings.linewidth = 3
+# g.settings.linewidth_contour = 3
+# g.settings.num_plot_contours = 2
+# theta_true = [0.415, 2.3, 0.3085, 34] 
+# pars = []
+# markers = {}
+# for i in range(len(theta_true)):
+#     pars.append('p'+str(i))
+#     markers['p'+str(i)] = theta_true[i]
 
-g.triangle_plot(samples.samples, pars,
-    markers=markers)
-g.export('posterior2.pdf')
+# g.triangle_plot(samples.samples, pars,
+#     markers=markers)
+# g.export('posterior2.pdf')

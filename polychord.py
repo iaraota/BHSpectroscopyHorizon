@@ -18,17 +18,17 @@ class Polychord(SourceData):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # self.modes_data = self.modes
-        # self.modes_model = self.modes
-        # self._inject_data(self.modes_data)
-        # self._theta_true()
+        self.modes_data = self.modes
+        self.modes_model = self.modes
+        self._inject_data(self.modes_data)
+        self._theta_true()
 
     def run_all(self):
-        self.modes_data = self.modes
-        self._inject_data(self.modes_data)
+        # self.modes_data = self.modes
+        # self._inject_data(self.modes_data)
 
-        self.modes_model = self.modes
-        self._theta_true()
+        # self.modes_model = self.modes
+        # self._theta_true()
         self.plot_posterior()
         
         # self.modes_model = [self.modes[0]]
@@ -52,6 +52,10 @@ class Polychord(SourceData):
         nDerived = 1
         
         path = "z-"+str(self.redshift)+"_M-"+str(self.final_mass)
+        for mode in self.modes:
+            path += '-'
+            mode = mode[1]+mode[3]+mode[5]
+            path += mode
 
         if not os.path.exists("chains/"+path):
             os.makedirs("chains/"+path)
@@ -117,9 +121,10 @@ class Polychord(SourceData):
         """ Uniform prior from [true/100,true*100]. """
         cube = np.array(hypercube)
         for i in range(len(self.modes_model)):
-            cube[0+4*i] = UniformPrior(0, 100)(cube[0 + 4*i])
+            cube[0+4*i] = UniformPrior(0, 10)(cube[0 + 4*i])
             cube[1+4*i] = UniformPrior(0, 2*np.pi)(cube[1 + 4*i])
-            cube[2+4*i] = UniformPrior(self.theta_true[2 + 4*i]/100, self.theta_true[2 + 4*i]*100)(cube[2 + 4*i])
+            # cube[2+4*i] = UniformPrior(self.theta_true[2 + 4*i]/100, self.theta_true[2 + 4*i]*100)(cube[2 + 4*i])
+            cube[2+4*i] = UniformPrior(0, 5000)(cube[2 + 4*i])
             cube[3+4*i] = UniformPrior(self.theta_true[3 + 4*i]/100, self.theta_true[3 + 4*i]*100)(cube[3 + 4*i])
         return cube
 
@@ -179,13 +184,14 @@ class Polychord(SourceData):
 
 if __name__ == '__main__':
     from datetime import datetime
-    np.random.seed(123)
+    np.random.seed(1234)
     start=datetime.now()
     m_f = 500
     z = 0.1
     q = 1.5
     detector = "LIGO"
     modes = ("(2,2,0)", "(2,2,1) I")
+    # modes = ("(2,2,0)", "(4,4,0)")
     # modes = ["(2,2,0)"]
     teste = Polychord(detector, modes, m_f, z, q, "FH")
     teste.run_all()
