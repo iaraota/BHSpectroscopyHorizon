@@ -25,13 +25,11 @@ class SourceData:
 
     def __init__(self,
         detector:str,
-        modes:list,
         final_mass:float,
         redshift:float,
         q_mass:float,
         convention:str="FH"):
 
-        self.modes = tuple(modes)
         self.final_mass = final_mass
         self.redshift = redshift
         self.q_mass = q_mass
@@ -78,7 +76,7 @@ class SourceData:
         # make noise an immutable array
         self.noise.flags.writeable = False
 
-    def _inject_data(self, modes_data):
+    def inject_data(self, modes_data):
         """Generate data from noise and QNM waveform.
         """
         # d = n
@@ -86,6 +84,24 @@ class SourceData:
         # d = n + modes
         for mode in modes_data:
             self.data += self.qnm_modes[mode].qnm_f["real"]
+
+    def __str__(self):
+        return ('Create QNMs for a binary with:\n\t' 
+            +f'mass ratio {self.q_mass},\n\t'
+            +f'final mass {self.final_mass},\n\t'
+            +f'redshift {self.redshift}\n\t'
+            +f'and {self.detector["label"]} detector.\n\n'
+            +'The method inject_data(modes_data) injects the selected QNMs in the detector noise.'
+            )
+
+    def __repr__(self):
+        return (f'Create QNMs for a binary with:\n\t' 
+            + 'mass ratio {self.q_mass},\n\t'
+            +'final mass {self.final_mass},\n\t'
+            +'redshift {self.redshift}\n\t'
+            +'and {self.detector["label"]} detector.\n\n'
+            +'The method inject_data(modes_data) injects the selected QNMs in the detector noise.'
+            )
 
 
 
@@ -95,5 +111,5 @@ if __name__ == '__main__':
     z = 0.8
     q = 1.0
     detector = "LIGO"
-    modes = ("(2,2,0)", "(2,2,1) I")
-    teste = SourceData(detector, modes, m_f, z, q, "FH")
+    teste = SourceData(detector, m_f, z, q, "FH")
+    print(teste)
