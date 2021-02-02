@@ -23,6 +23,11 @@ class Polychord(SourceData):
         self.inject_data(self.modes_data) # construct self.data
         self._theta_true()
 
+    def plot(self):
+        plt.loglog(self.data)
+        plt.loglog(self.model_function(self.theta_true))
+
+        plt.show()
 
     def run_dynesty(self):
         ndim = len(self.theta_true)
@@ -48,13 +53,14 @@ class Polychord(SourceData):
         transform = lambda a, b, x: a + (b - a) * x
         cube = np.array(hypercube)
         for i in range(len(self.modes_model)):
-            cube[0+4*i] = transform(0.0, 10,cube[0 + 4*i])
+            if i == 0:
+                cube[0+4*i] = transform(0.0, 10,cube[0 + 4*i])
+            else:
+                cube[0+4*i] = transform(0.0, 0.9,cube[0 + 4*i])
             cube[1+4*i] = transform(0.0, 2*np.pi,cube[1 + 4*i])
-            cube[2+4*i] = transform(self.theta_true[2 + 4*i]/10,
-                            self.theta_true[2 + 4*i]*10,cube[2 + 4*i])
+            cube[2+4*i] = transform(0.0, self.theta_true[2 + 4*i]*10,cube[2 + 4*i])
             # cube[2+4*i] = transform(0.0, 5000,cube[2 + 4*i])
-            cube[3+4*i] = transform(self.theta_true[3 + 4*i]/10,
-                            self.theta_true[3 + 4*i]*10,cube[3 + 4*i])
+            cube[3+4*i] = transform(0.0, self.theta_true[3 + 4*i]*10,cube[3 + 4*i])
         return cube
 
     def _theta_true(self):
@@ -62,7 +68,11 @@ class Polychord(SourceData):
         """
         self.theta_true = []
         for mode in self.modes_model:
-            self.theta_true.extend([self.qnm_modes[mode].amplitude,
+            if mode == "(2,2,0)":
+                A_0 = 1
+            else:
+                A_0 = self.qnm_modes["(2,2,0)"].amplitude
+            self.theta_true.extend([self.qnm_modes[mode].amplitude/A_0,
                 float(self.qnm_modes[mode].phase),
                 self.qnm_modes[mode].frequency,
                 # self.qnm_modes[mode].frequency*1e-2,
@@ -86,6 +96,7 @@ class Polychord(SourceData):
         return MCMCFunctions.log_likelihood_qnm(theta,
             self.model_function, self.data, self.detector["freq"], self.detector["psd"]
             )
+
     def model_function(self, theta:list):
         """Generate waveform model function of QNMs.
 
@@ -99,17 +110,25 @@ class Polychord(SourceData):
         function
             Waveform model as a function of parameters theta.
         """
-        h_model = 0
-        for i in range(len(self.modes_model)):
-            A, phi, freq, tau = theta[0 + 4*i: 4 + 4*i]
-            # freq *= 1e2
-            tau *= 1e-3
-            omega_r = freq*2*np.pi*self.time_convert
-            omega_i = self.time_convert/tau
-            h_model += self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
-                self.detector["freq"]*self.time_convert, A, phi, omega_r, omega_i, 
+        A0, phi0, freq0, tau0 = theta[0:4]
+        R, phi1, freq1, tau1 = theta[4:]
+
+        tau0 *= 1e-3
+        omega_r0 = freq0*2*np.pi*self.time_convert
+        omega_i0 = self.time_convert/tau0
+
+        tau1 *= 1e-3
+        omega_r1 = freq1*2*np.pi*self.time_convert
+        omega_i1 = self.time_convert/tau1
+
+        h_model0 = self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
+                self.detector["freq"]*self.time_convert, A0, phi0, omega_r0, omega_i0, 
                 part = "real", convention = self.ft_convention)
-        return h_model
+
+        h_model1 = self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
+                self.detector["freq"]*self.time_convert, A0*R, phi1, omega_r1, omega_i1, 
+                part = "real", convention = self.ft_convention)
+        return h_model0 + h_model1
 
 
 if __name__ == '__main__':
@@ -125,4 +144,5 @@ if __name__ == '__main__':
     modes_model = ["(2,2,0)"]
     teste = Polychord(modes, modes, detector, m_f, z, q, "FH")
     teste.run_dynesty()
+    # teste.plot()
     print(datetime.now()-start)

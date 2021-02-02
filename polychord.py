@@ -103,8 +103,8 @@ class Polychord(SourceData):
         for i in range(len(self.modes_model)):
             cube[0+4*i] = UniformPrior(0.0, 10)(cube[0 + 4*i])
             cube[1+4*i] = UniformPrior(0.0, 2*np.pi)(cube[1 + 4*i])
-            # cube[2+4*i] = UniformPrior(self.theta_true[2 + 4*i]/100, self.theta_true[2 + 4*i]*100)(cube[2 + 4*i])
-            cube[2+4*i] = UniformPrior(0.0, 5000)(cube[2 + 4*i])
+            cube[2+4*i] = UniformPrior(self.theta_true[2 + 4*i]/100, self.theta_true[2 + 4*i]*100)(cube[2 + 4*i])
+            # cube[2+4*i] = UniformPrior(0.0, 5000)(cube[2 + 4*i])
             cube[3+4*i] = UniformPrior(self.theta_true[3 + 4*i]/100, self.theta_true[3 + 4*i]*100)(cube[3 + 4*i])
         return cube
 
