@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -216,7 +217,10 @@ class Polychord(SourceData):
             self.fit_coeff[mode] = self.transf_fit_coeff(mode)
 
         self._theta_true_mass_spin()
-        ndim = len(self.theta_true)
+        ndim = len(self.theta_true_mass_spin)
+        
+        # time to run sampler
+        start_time=datetime.now()
 
         sampler = dynesty.NestedSampler(
             self.loglikelihood_mass_spin, 
@@ -228,12 +232,20 @@ class Polychord(SourceData):
             )
         sampler.run_nested()
         results = sampler.results
+    
+        print(datetime.now()-start_time)
+
+        print(results.summary())
+
         samples = results.samples  # samples
         weights = np.exp(results.logwt - results.logz[-1])  # normalized weights
         samples_equal = dyfunc.resample_equal(samples, weights)
-        corner.corner(samples_equal, truths=self.theta_true_mass_spin)
+        corner.corner(
+            samples_equal,
+            truths=self.theta_true_mass_spin,
+            labels=self.theta_labels_mass_spin,
+            )
         plt.show()
-        print(results.summary())
 
     def prior_transform_mass_spin(self, hypercube):
         """Transforms the uniform random variable 'hypercube ~ Unif[0., 1.)'
@@ -241,30 +253,62 @@ class Polychord(SourceData):
         transform = lambda a, b, x: a + (b - a) * x
         cube = np.array(hypercube)
         for i in range(len(self.modes_model)):
-            if i == 0:
-                cube[0+4*i] = transform(0.0, 10,cube[0 + 4*i])
-            else:
-                cube[0+4*i] = transform(0.0, 0.9,cube[0 + 4*i])
+            cube[0+4*i] = transform(0.0, 10,cube[0 + 4*i])
             cube[1+4*i] = transform(0.0, 2*np.pi,cube[1 + 4*i])
-            cube[2+4*i] = transform(0.0, self.theta_true[2 + 4*i]*10,cube[2 + 4*i])
-            cube[3+4*i] = transform(0.0, self.theta_true[3 + 4*i]*10,cube[3 + 4*i])
+            cube[2+4*i] = transform(0.9, 1,cube[2 + 4*i])
+            cube[3+4*i] = transform(0.0, 0.9999,cube[3 + 4*i])
         return cube
+        # cube = np.array(hypercube)
+
+        # cube[0] = transform(0.0, 10, cube[0])
+        # cube[1] = transform(0.0, 2*np.pi, cube[1])
+        # cube[2] = transform(0.0, 1, cube[2])
+        # cube[3] = transform(0.0, 0.9999, cube[3])
+        # cube[2] = transform(0.0, 1.0, cube[2])
+        # cube[3] = transform(0.0, 2*np.pi, cube[3])
+        # cube[4] = transform(0.0, 1, cube[4])
+        # cube[5] = transform(0.0, 1, cube[5])
+
+        # return cube
+
 
     def _theta_true_mass_spin(self):
         """Generate a list of the true injected parameters.
         """
-        self.theta_true = (
-            self.qnm_modes[self.modes_model[0]].amplitude,
-            self.qnm_modes[self.modes_model[0]].phase,
-            self.qnm_modes[self.modes_model[1]].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
-            self.qnm_modes[self.modes_model[1]].phase,
-            self.final_mass,
-            self.transform_omegas_to_mass_spin(
-                self.qnm_modes[self.modes_model[0]].omega_r,
-                self.qnm_modes[self.modes_model[0]].omega_i,
-                self.fit_coeff[self.modes_model[0]]
-            ),
-        )
+        self.theta_true_mass_spin = []
+        self.theta_labels_mass_spin = []
+
+        for mode in self.modes_model:
+            self.theta_true_mass_spin.extend(
+                [self.qnm_modes[mode].amplitude,
+                float(self.qnm_modes[mode].phase),
+                self.mass_f,
+                self.final_spin])
+            self.theta_labels_mass_spin.extend([
+                r"$A_{{{0}}}$".format(mode),
+                r"$\phi_{{{0}}}$".format(mode),
+                r"$M_{{{0}}}$".format(mode),
+                r"$a_{{{0}}}$".format(mode),
+            ])
+        self.theta_true_mass_spin = tuple(self.theta_true_mass_spin)
+
+
+        # self.theta_true_mass_spin = (
+        #     self.qnm_modes[self.modes_model[0]].amplitude,
+        #     self.qnm_modes[self.modes_model[0]].phase,
+        #     # self.qnm_modes[self.modes_model[1]].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
+        #     # self.qnm_modes[self.modes_model[1]].phase,
+        #     self.mass_f,
+        #     self.final_spin,
+        # )
+        # self.theta_labels_mass_spin = (
+        #     r"$A_0$",
+        #     r"$\phi_0$",
+        #     # r"$R$",
+        #     # r"$\phi_1$",
+        #     r"$M_f$",
+        #     r"$a_f$",
+        # )
 
     def loglikelihood_mass_spin(self, theta:list):
         """Generate the likelihood function for QNMs.
@@ -301,52 +345,63 @@ class Polychord(SourceData):
         function
             Waveform model as a function of parameters theta.
         """
-        A0, phi0, R, phi1, M, a = theta
-
-        omega_r0, omega_i0 = self.transform_mass_spin_to_omegas(
-            M,
-            a,
-            self.fit_coeff[self.modes_model[0]]
-        )
-
-        h_model0 = self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
-                self.detector["freq"]*self.time_convert, A0, phi0, omega_r0, omega_i0, 
+        h_model = 0
+        for i in range(len(self.modes_model)):
+            A, phi, M, a = theta[0 + 4*i: 4 + 4*i]
+            omega_r, omega_i = self.transform_mass_spin_to_omegas(
+                M,
+                a,
+                self.modes_model[i],
+                self.fit_coeff[self.modes_model[i]]
+            )
+            h_model += self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
+                self.detector["freq"]*self.time_convert, A, phi, omega_r, omega_i, 
                 part = "real", convention = self.ft_convention)
-
-        h_model = np.copy(h_model0)
-
-        omega_r0, omega_i0 = self.transform_mass_spin_to_omegas(
-            M,
-            a,
-            self.fit_coeff[self.modes_model[0]]
-        )
-
-        h_model1 = self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
-                self.detector["freq"]*self.time_convert, A0*R, phi1, omega_r1, omega_i1, 
-                part = "real", convention = self.ft_convention)
-
-        h_model += h_model1
-
         return h_model
+        # A0, phi0, R, phi1, M, a = theta
+        # A0, phi0, M0, a0 = theta[0:4]
+
+        # omega_r0, omega_i0 = self.transform_mass_spin_to_omegas(
+        #     M0,
+        #     a0,
+        #     self.fit_coeff[self.modes_model[0]]
+        # )
+
+        # h_model0 = self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
+        #         self.detector["freq"]*self.time_convert, A0, phi0, omega_r0, omega_i0, 
+        #         part = "real", convention = self.ft_convention)
+
+        # h_model = np.copy(h_model0)
+
+        # omega_r1, omega_i1 = self.transform_mass_spin_to_omegas(
+        #     M,
+        #     a,
+        #     self.fit_coeff[self.modes_model[1]]
+        # )
+
+        # h_model1 = self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
+        #         self.detector["freq"]*self.time_convert, A0*R, phi1, omega_r1, omega_i1, 
+        #         part = "real", convention = self.ft_convention)
+
+        # h_model += h_model1
+
+        # return h_model
 
 
 if __name__ == '__main__':
-    from datetime import datetime
-    np.random.seed(1234)
-    start=datetime.now()
+    np.random.seed(123)
     m_f = 500
     z = 0.1
     q = 1.5
     detector = "LIGO"
     modes = ["(2,2,0)"]
-    modes = ["(2,2,0)", "(2,2,1) I"]
+    # modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
-    # modes_model = ["(2,2,0)"]
-    modes_model = ["(2,2,0)", "(2,2,1) I"]
+    modes_model = ["(2,2,0)"]
+    # modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
     teste = Polychord(modes, modes_model, detector, m_f, z, q, "FH")
     teste.run_dynesty_mass_spin()
     # teste.plot()
-    print(datetime.now()-start)

@@ -41,6 +41,8 @@ class SourceData:
 
         # get QNM parameters from simulation
         self.qnm_pars, self.mass_f = ImportData.import_simulation_qnm_parameters(self.q_mass)
+        
+        # Compute inifical mass
         self.initial_mass = self.final_mass/self.mass_f
 
         # get convertion factor for time and amplitude
@@ -49,6 +51,13 @@ class SourceData:
 
         # compute QNMs waveforms
         self._compute_qnm_modes()
+
+        # compute final spin in final mass units
+        self.final_spin = self.transform_omegas_to_mass_spin(
+                self.qnm_modes["(2,2,0)"].omega_r,
+                self.qnm_modes["(2,2,0)"].omega_i,
+                self.transf_fit_coeff("(2,2,0)")
+            )[1]
 
         # compute noise
         self._random_noise()
@@ -131,7 +140,8 @@ class SourceData:
     def transform_mass_spin_to_omegas(
         self,
         M:float,
-        a:float,
+        a_over_M:float,
+        mode:str,
         fit_coeff:list,
         ):
         """Transform mass and spin do quasinormal mode omegas (frequencies)
@@ -153,12 +163,17 @@ class SourceData:
         float, float
             Quasinormal mode frequencies in NR units.
         """
-        # for spin in units of FINAL mass change a to a/M
+
+        # files = np.genfromtxt(f'../frequencies_l{mode[1]}/n{str(int(mode[5])+1)}l{mode[1]}m{mode[3]}.dat', usecols=range(3))
+        # for i in range(len(files)):
+        #     if files[i][0] == round(a_over_M,4): 
+        #         omega_r = files[i][1]/M
+        #         omega_i = -files[i][2]/M
+        #         break
 
         f1,f2,f3,q1,q2,q3 = fit_coeff
-        omega_r = (f1 + f2*(1 - a)**f3)/M
-        Q_factor = q1 + q2*(1-a)**q3
-        omega_i = omega_r/(2*Q_factor)
+        omega_r = (f1 + f2*(1 - a_over_M)**f3)/M
+        omega_i = omega_r/(2*(q1 + q2*(1 - a_over_M)**q3))
         return omega_r, omega_i
 
     def transform_omegas_to_mass_spin(
@@ -189,10 +204,17 @@ class SourceData:
         f1,f2,f3,q1,q2,q3 = fit_coeff
 
         factor = ((omega_r/(2*omega_i) - q1)/q2)**(1/q3)
-
         M = (f1 + f2*factor**f3)/omega_r
         a_over_M = (1 - factor)
-        a = a_over_M*M
+        # a in units of final mass
+        # a = a_over_M*M 
+        # files = np.genfromtxt('../frequencies_l2/n1l2m2.dat', usecols=range(3))
+        # for i in range(len(files)):
+        #     if files[i][0] == round(a_over_M,4):
+        #         wr_aux = files[i][1]
+        #         wi_aux = -files[i][2]
+        #         break
+        # M = wr_aux/omega_r
 
         return M, a_over_M
 
@@ -219,15 +241,17 @@ class SourceData:
 
 if __name__ == '__main__':
 
-    m_f = 142
-    z = 0.8
+    m_f = 500
+    z = 0.1
     q = 1.5
     detector = "LIGO"
     teste = SourceData(detector, m_f, z, q, "FH")
     fits = teste.transf_fit_coeff("(2,2,0)")
     M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
-    wr, wi = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, 0.668, fits)
-    print(teste.initial_mass)
-    print(M*teste.initial_mass, a)
+    omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, "(2,2,0)", fits)
+    M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
+    print(teste.mass_f)
+    print(M, a)
+    print(teste.final_spin)
     print(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i)
-    print(wr, wi)
+    print(omega_r, omega_i)
