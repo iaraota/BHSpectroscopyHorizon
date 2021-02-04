@@ -2,7 +2,6 @@ import numpy as np
 from scipy import integrate
 from . import PhysConst
 
-
 def inner_product(frequency, h1, h2, Sh):
     """Compute gravitational wave noise-weigthed inner product
 

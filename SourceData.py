@@ -1,6 +1,7 @@
 import numpy as np
 from modules import GWFunctions, MCMCFunctions, ImportData, PlotFunctions
-
+import os
+import pandas as pd
 class SourceData:
     """Generate waveforms, noise and injected data
     from choosen QNMs and detector in frequency domain.
@@ -40,6 +41,7 @@ class SourceData:
 
         # get QNM parameters from simulation
         self.qnm_pars, self.mass_f = ImportData.import_simulation_qnm_parameters(self.q_mass)
+        self.initial_mass = self.final_mass/self.mass_f
 
         # get convertion factor for time and amplitude
         self.time_convert, self.amplitude_scale = GWFunctions.convert_units(
@@ -85,6 +87,116 @@ class SourceData:
         for mode in modes_data:
             self.data += self.qnm_modes[mode].qnm_f["real"]
 
+    def transf_fit_coeff(
+        self,
+        mode:str,
+        ):
+        """Fits coefficients to Kerr QNM frequencies 
+        to transform mass M and spin a to frequency and time.
+        https://pages.jh.edu/eberti2/ringdown/
+
+        files columns: l, m, n, f1, f2, f3, q1, q2, q3
+        l, m, n are the quasinormal modes indices
+
+        fit formulas:
+        M*omega_r = f1 + f2*(1 - a/M)^f3
+        Q = q1 + q2*(1 - a/M)^q3
+        Q = omega_r/(2*omega_i)
+
+        Parameters
+        ----------
+        mode : str
+            quasinormal mode to get the coefficients
+
+        Returns
+        -------
+        tuple
+            Fit coefficients f1, f2, f3, q1, q2, q3 for the chosen mode.
+        """
+        file_path = os.path.join(os.getcwd(), "..", "fitcoeffsWEB.dat")
+        l = float(mode[1])
+        m = float(mode[3])
+        n = float(mode[5])
+        file = np.genfromtxt(file_path)
+        
+        df = pd.DataFrame(file, 
+            columns = ['l', 'm', 'n', 'f1', 'f2', 'f3', 'q1', 'q2', 'q3'])
+
+        f1,f2,f3,q1,q2,q3 = df[
+            (df['l'] == l) & (df['m'] == m) & (df['n'] == n)][
+                ['f1', 'f2', 'f3', 'q1', 'q2', 'q3']
+            ].values[0]
+        return (f1,f2,f3,q1,q2,q3)
+
+    def transform_mass_spin_to_omegas(
+        self,
+        M:float,
+        a:float,
+        fit_coeff:list,
+        ):
+        """Transform mass and spin do quasinormal mode omegas (frequencies)
+
+        Parameters
+        ----------
+        M : float
+            Black hole final mass in units of initial mass.
+            (M_final/M_initial)
+        a : float
+            Black hole spin in units of initial mass.
+        fit_coeff : array_like
+            Fits coefficient to Kerr QNM frequencies. 
+            See transf_fit_coeff method or  
+            https://pages.jh.edu/eberti2/ringdown/
+
+        Returns
+        -------
+        float, float
+            Quasinormal mode frequencies in NR units.
+        """
+        # for spin in units of FINAL mass change a to a/M
+
+        f1,f2,f3,q1,q2,q3 = fit_coeff
+        omega_r = (f1 + f2*(1 - a)**f3)/M
+        Q_factor = q1 + q2*(1-a)**q3
+        omega_i = omega_r/(2*Q_factor)
+        return omega_r, omega_i
+
+    def transform_omegas_to_mass_spin(
+        self,
+        omega_r:float,
+        omega_i:float,
+        fit_coeff:list,
+        ):
+        """Transform mass and spin do quasinormal mode omegas (frequencies)
+
+        Parameters
+        ----------
+        omega_r : float
+            qnm real frequency in code units (initial mass).
+        omega_i : float
+            qnm imaginary frequency in code units (initial mass).
+        fit_coeff : array_like
+            Fits coefficient to Kerr QNM frequencies. 
+            See transf_fit_coeff method or  
+            https://pages.jh.edu/eberti2/ringdown/
+
+        Returns
+        -------
+        float, float
+            Black hole mass and spin both in units of initial mass.
+        """
+
+        f1,f2,f3,q1,q2,q3 = fit_coeff
+
+        factor = ((omega_r/(2*omega_i) - q1)/q2)**(1/q3)
+
+        M = (f1 + f2*factor**f3)/omega_r
+        a_over_M = (1 - factor)
+        a = a_over_M*M
+
+        return M, a_over_M
+
+
     def __str__(self):
         return ('Create QNMs for a binary with:\n\t' 
             +f'mass ratio {self.q_mass},\n\t'
@@ -109,7 +221,13 @@ if __name__ == '__main__':
 
     m_f = 142
     z = 0.8
-    q = 1.0
+    q = 1.5
     detector = "LIGO"
     teste = SourceData(detector, m_f, z, q, "FH")
-    print(teste)
+    fits = teste.transf_fit_coeff("(2,2,0)")
+    M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
+    wr, wi = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, 0.668, fits)
+    print(teste.initial_mass)
+    print(M*teste.initial_mass, a)
+    print(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i)
+    print(wr, wi)
