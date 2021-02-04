@@ -59,6 +59,12 @@ class SourceData:
                 self.transf_fit_coeff("(2,2,0)")
             )[1]
 
+        self.mass_final = self.transform_omegas_to_mass_spin(
+                self.qnm_modes["(2,2,0)"].omega_r,
+                self.qnm_modes["(2,2,0)"].omega_i,
+                self.transf_fit_coeff("(2,2,0)")
+            )[0]
+        self.mass_initial = self.final_mass/self.mass_final
         # compute noise
         self._random_noise()
 
@@ -137,12 +143,25 @@ class SourceData:
             ].values[0]
         return (f1,f2,f3,q1,q2,q3)
 
+    def create_a_over_M_omegas_dataframe(
+        self,
+        mode:str,
+        ):
+
+        files = np.genfromtxt(f'../frequencies_l{mode[1]}/n{str(int(mode[5])+1)}l{mode[1]}m{mode[3]}.dat', usecols=range(3))
+
+        df = pd.DataFrame({"omega_r": files[:,1], "omega_i": -files[:,2]}, index = files[:,0])
+
+        return df
+
+
     def transform_mass_spin_to_omegas(
         self,
         M:float,
         a_over_M:float,
-        mode:str,
-        fit_coeff:list,
+        df,
+        # mode:str,
+        # fit_coeff:list,
         ):
         """Transform mass and spin do quasinormal mode omegas (frequencies)
 
@@ -163,6 +182,8 @@ class SourceData:
         float, float
             Quasinormal mode frequencies in NR units.
         """
+        omega_r = df.loc[round(a_over_M,4)].omega_r/M
+        omega_i = df.loc[round(a_over_M,4)].omega_i/M
 
         # files = np.genfromtxt(f'../frequencies_l{mode[1]}/n{str(int(mode[5])+1)}l{mode[1]}m{mode[3]}.dat', usecols=range(3))
         # for i in range(len(files)):
@@ -171,15 +192,16 @@ class SourceData:
         #         omega_i = -files[i][2]/M
         #         break
 
-        f1,f2,f3,q1,q2,q3 = fit_coeff
-        omega_r = (f1 + f2*(1 - a_over_M)**f3)/M
-        omega_i = omega_r/(2*(q1 + q2*(1 - a_over_M)**q3))
+        # f1,f2,f3,q1,q2,q3 = fit_coeff
+        # omega_r = (f1 + f2*(1 - a_over_M)**f3)/M
+        # omega_i = omega_r/(2*(q1 + q2*(1 - a_over_M)**q3))
         return omega_r, omega_i
 
     def transform_omegas_to_mass_spin(
         self,
         omega_r:float,
         omega_i:float,
+        # df,
         fit_coeff:list,
         ):
         """Transform mass and spin do quasinormal mode omegas (frequencies)
@@ -201,6 +223,9 @@ class SourceData:
             Black hole mass and spin both in units of initial mass.
         """
 
+
+
+
         f1,f2,f3,q1,q2,q3 = fit_coeff
 
         factor = ((omega_r/(2*omega_i) - q1)/q2)**(1/q3)
@@ -208,6 +233,7 @@ class SourceData:
         a_over_M = (1 - factor)
         # a in units of final mass
         # a = a_over_M*M 
+
         # files = np.genfromtxt('../frequencies_l2/n1l2m2.dat', usecols=range(3))
         # for i in range(len(files)):
         #     if files[i][0] == round(a_over_M,4):
@@ -247,11 +273,11 @@ if __name__ == '__main__':
     detector = "LIGO"
     teste = SourceData(detector, m_f, z, q, "FH")
     fits = teste.transf_fit_coeff("(2,2,0)")
-    M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
-    omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, "(2,2,0)", fits)
-    M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
+    # M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
+    # omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, "(2,2,0)", fits)
+    # M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
     print(teste.mass_f)
-    print(M, a)
-    print(teste.final_spin)
-    print(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i)
-    print(omega_r, omega_i)
+    # print(M, a)
+    # print(teste.final_spin)
+    print(teste.qnm_modes["(2,2,0)"].omega_r*teste.mass_f, teste.qnm_modes["(2,2,0)"].omega_i*teste.mass_f)
+    # print(omega_r, omega_i)
