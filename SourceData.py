@@ -229,18 +229,19 @@ class SourceData:
         f1,f2,f3,q1,q2,q3 = fit_coeff
 
         factor = ((omega_r/(2*omega_i) - q1)/q2)**(1/q3)
-        M = (f1 + f2*factor**f3)/omega_r
+        # M = (f1 + f2*factor**f3)/omega_r
         a_over_M = (1 - factor)
         # a in units of final mass
         # a = a_over_M*M 
 
-        # files = np.genfromtxt('../frequencies_l2/n1l2m2.dat', usecols=range(3))
-        # for i in range(len(files)):
-        #     if files[i][0] == round(a_over_M,4):
-        #         wr_aux = files[i][1]
-        #         wi_aux = -files[i][2]
-        #         break
-        # M = wr_aux/omega_r
+        files = np.genfromtxt('../frequencies_l2/n1l2m2.dat', usecols=range(3))
+        for i in range(len(files)):
+            if files[i][0] == round(a_over_M,4):
+                wr_aux = files[i][1]
+                wi_aux = -files[i][2]
+                break
+        M = wr_aux/omega_r
+
 
         return M, a_over_M
 
@@ -273,11 +274,11 @@ if __name__ == '__main__':
     detector = "LIGO"
     teste = SourceData(detector, m_f, z, q, "FH")
     fits = teste.transf_fit_coeff("(2,2,0)")
-    # M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
+    M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
     # omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, "(2,2,0)", fits)
     # M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
     print(teste.mass_f)
-    # print(M, a)
-    # print(teste.final_spin)
-    print(teste.qnm_modes["(2,2,0)"].omega_r*teste.mass_f, teste.qnm_modes["(2,2,0)"].omega_i*teste.mass_f)
+    print(M, a)
+    print(teste.mass_initial*teste.mass_final)
+    print(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i)
     # print(omega_r, omega_i)

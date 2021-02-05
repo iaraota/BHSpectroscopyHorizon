@@ -258,27 +258,27 @@ class PlotPDF(MCMC):
 
         self.plot_seaborn()
         
-        self.modes_model = [self.modes[0]]
-        self._theta_true()
-        self._maximize_loglike()
-        self._prior_and_logpdf()
-        self.plot_seaborn()
+        # self.modes_model = [self.modes[0]]
+        # self._theta_true()
+        # self._maximize_loglike()
+        # self._prior_and_logpdf()
+        # self.plot_seaborn()
 
-        self.modes_data = [self.modes[0]]
-        self.modes_model = self.modes
-        self._inject_data()
-        self._theta_true()
-        self._maximize_loglike()
-        self._prior_and_logpdf()
+        # self.modes_data = [self.modes[0]]
+        # self.modes_model = self.modes
+        # self._inject_data()
+        # self._theta_true()
+        # self._maximize_loglike()
+        # self._prior_and_logpdf()
 
 
-        self.plot_seaborn()
+        # self.plot_seaborn()
 
-        self.modes_model = [self.modes[0]]
-        self._theta_true()
-        self._maximize_loglike()
-        self._prior_and_logpdf()
-        self.plot_seaborn()
+        # self.modes_model = [self.modes[0]]
+        # self._theta_true()
+        # self._maximize_loglike()
+        # self._prior_and_logpdf()
+        # self.plot_seaborn()
         
     def plot_walks(self):
         self._plot_labels()
@@ -442,6 +442,12 @@ if __name__ == '__main__':
     m_f = 142
     z = 0.8
     q = 1.0
+
+    m_f = 150.3
+    z = 0.01
+    # z = 0.72
+    # z = 0.15
+    # z = 0.05
     detector = "LIGO"
     modes = ("(2,2,0)", "(2,2,1) I")
     # print(source)
