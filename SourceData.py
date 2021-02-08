@@ -70,6 +70,16 @@ class SourceData:
         # compute noise
         self._random_noise()
 
+        # compute tables
+
+        self.fit_coeff = {}
+        for mode in self.qnm_modes.keys():
+            self.fit_coeff[mode] = self.transf_fit_coeff(mode)
+
+        self.df_a_omegas = {}
+        for mode in self.qnm_modes.keys():
+            self.df_a_omegas[mode] = self.create_a_over_M_omegas_dataframe(mode)
+
     def _compute_qnm_modes(self):
         """Comptute QNM waveforms in frequency domain.
         """
