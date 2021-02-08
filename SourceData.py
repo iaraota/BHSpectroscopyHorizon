@@ -56,13 +56,15 @@ class SourceData:
         self.final_spin = self.transform_omegas_to_mass_spin(
                 self.qnm_modes["(2,2,0)"].omega_r,
                 self.qnm_modes["(2,2,0)"].omega_i,
-                self.transf_fit_coeff("(2,2,0)")
+                self.create_a_over_M_omegas_dataframe("(2,2,0)"),
+                self.transf_fit_coeff("(2,2,0)"),
             )[1]
 
         self.mass_final = self.transform_omegas_to_mass_spin(
                 self.qnm_modes["(2,2,0)"].omega_r,
                 self.qnm_modes["(2,2,0)"].omega_i,
-                self.transf_fit_coeff("(2,2,0)")
+                self.create_a_over_M_omegas_dataframe("(2,2,0)"),
+                self.transf_fit_coeff("(2,2,0)"),
             )[0]
         self.mass_initial = self.final_mass/self.mass_final
         # compute noise
@@ -201,7 +203,7 @@ class SourceData:
         self,
         omega_r:float,
         omega_i:float,
-        # df,
+        df,
         fit_coeff:list,
         ):
         """Transform mass and spin do quasinormal mode omegas (frequencies)
@@ -233,15 +235,10 @@ class SourceData:
         a_over_M = (1 - factor)
         # a in units of final mass
         # a = a_over_M*M 
-
-        files = np.genfromtxt('../frequencies_l2/n1l2m2.dat', usecols=range(3))
-        for i in range(len(files)):
-            if files[i][0] == round(a_over_M,4):
-                wr_aux = files[i][1]
-                wi_aux = -files[i][2]
-                break
+        
+        wr_aux = df.loc[round(a_over_M,4)].omega_r
+        wi_aux = df.loc[round(a_over_M,4)].omega_i
         M = wr_aux/omega_r
-
 
         return M, a_over_M
 
@@ -274,7 +271,8 @@ if __name__ == '__main__':
     detector = "LIGO"
     teste = SourceData(detector, m_f, z, q, "FH")
     fits = teste.transf_fit_coeff("(2,2,0)")
-    M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i, fits)
+    df = teste.create_a_over_M_omegas_dataframe("(2,2,0)")
+    M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i,df, fits)
     # omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, "(2,2,0)", fits)
     # M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
     print(teste.mass_f)
