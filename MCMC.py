@@ -116,7 +116,8 @@ class MCMC(SourceData):
         """
         ndim = len(self.initial)
         # TODO: escolher inicio de caminhada em pontos aleatórios.
-        pos = (self.max_loglike + 1e-4 * np.random.randn(self.nwalkers, ndim))
+        pos = (self.theta_true + 1e-4 * np.random.randn(self.nwalkers, ndim))
+        # pos = (self.max_loglike + 1e-4 * np.random.randn(self.nwalkers, ndim))
 
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.log_pdf)
         sampler.run_mcmc(pos, self.nsteps, progress=True)
@@ -231,7 +232,8 @@ class MCMC(SourceData):
         limit_min = []
         limit_max = []
         for i in range(len(self.modes_model)):
-            limit_min.extend([0., 0., self.theta_true[2 + 4*i]/100, self.theta_true[3 + 4*i]/100])
+            # limit_min.extend([0., 0., self.theta_true[2 + 4*i]/100, self.theta_true[3 + 4*i]/100])
+            limit_min.extend([0., 0., 0., 0.])
             limit_max.extend([100., 2*np.pi, self.theta_true[2 + 4*i]*100, self.theta_true[3 + 4*i]*100])
 
         self.prior_function = lambda theta: MCMCFunctions.noninfor_log_prior(theta, limit_min, limit_max)
@@ -249,7 +251,7 @@ class PlotPDF(MCMC):
 
     def pdf_two_models(self):
         self.modes_data = self.modes
-        self.modes_model = self.modes
+        self.modes_model = [self.modes[0]]
         self._inject_data()
         self._theta_true()
         self._maximize_loglike()
@@ -334,6 +336,8 @@ class PlotPDF(MCMC):
                 np.round(df[self.labels[i]].quantile(.5),n_round),
                 np.round(df[self.labels[i]].quantile(.95) - df[self.labels[i]].quantile(.5),n_round),
                 np.round(df[self.labels[i]].quantile(.05) - df[self.labels[i]].quantile(.5),n_round)))
+
+        # fig.axes[-1][-1].set_xlim(0, 2*df[self.labels[i]].quantile(.95))
 
         label_modes = ""
         for mode in self.modes:
@@ -438,18 +442,18 @@ def hpd(trace, mass_frac) :
     return np.array([d[min_int], d[min_int+n_samples]])
 
 if __name__ == '__main__':
-    # np.random.seed(1234)
+    np.random.seed(123)
     m_f = 142
     z = 0.8
     q = 1.0
 
     m_f = 150.3
     z = 0.01
-    # z = 0.72
-    # z = 0.15
-    # z = 0.05
+    z = 0.72
+    z = 0.15
+    z = 0.05
     detector = "LIGO"
-    modes = ("(2,2,0)", "(2,2,1) I")
+    modes = ["(2,2,0)", "(2,2,1) I"]
     # print(source)
     # run_mcmc = FreqMCMC(detector, "FH", ("(2,2,0)", "(2,2,1) I"), m_f, z, q)
     # run_mcmc = FreqMCMC(["(3,3,0)"], 63, 0.1, 1.5, "LIGO", "FH")

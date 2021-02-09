@@ -13,6 +13,7 @@ import seaborn as sns
 import pandas as pd
 import emcee
 
+import Plots
 from SourceData import SourceData
 from Models import Models, TrueParameters, Priors
 from modules import MCMCFunctions, GWFunctions
@@ -39,186 +40,46 @@ class EmceeSampler(SourceData):
         ratio,
         ):
         self.run_sampler(model, ratio)
-        self._plot_parameters()
 
         df = pd.DataFrame(self.flat_samples, columns=self.true_pars.theta_labels)
-        colors = ['tab:blue', 'tab:orange']
+        m0, m1 = self.modes_model
+        l0 = '('+m0[1]+','+m0[3]+','+m0[5]+')'
+        l1 = '('+m1[1]+','+m1[3]+','+m1[5]+')'
+        df_colors = pd.DataFrame({
+            l0: ['tab:blue'],
+            l1: ['tab:orange'],
+            },
+            index=['color']
+            )
+        
+        df_masses = pd.DataFrame({
+            l0: [df[r"$M_{{{0}}}$".format(m0)].values],
+            l1: [df[r"$M_{{{0}}}$".format(m1)].values],
+            'true': [self.final_mass],
+            'label': ['final mass'],
+            },
+            index=['y']
+            )
+        df_spins = pd.DataFrame({
+            l0: [df[r"$a_{{{0}}}$".format(m0)].values],
+            l1: [df[r"$a_{{{0}}}$".format(m1)].values],
+            'teste': [df[r"$a_{{{0}}}$".format(m1)].values],
+            'true': [self.final_spin],
+            'label': ['final spin'],
+            },
+            index=['x']
+            )
+        
+        data = df_colors.append([df_masses, df_spins])
 
-        x_true, y_true = self.final_spin, self.final_mass
-
-        x, y = [], []
-        labels = []
-        for mode in reversed(self.modes_model):
-            # import data
-            x.append(df[r"$a_{{{0}}}$".format(mode)].values)
-            y.append(df[r"$M_{{{0}}}$".format(mode)].values)
-            labels.append('('+mode[1]+','+mode[3]+','+mode[5]+')')
-        self.pair_plot(x[0], y[0], x[1], y[1],
-            x_true, y_true,
-            xlabel = 'final spin',
-            ylabel = 'final mass',
-            plot_color= colors,
-            label=labels,
+        plots = Plots.Plots()
+        plots.pair_plot(data,
             )
 
         plt.savefig("figs/mass_spin"+str(len(self.modes_data))+"data"+str(len(self.modes_model))+"model"
                     + str(self.final_mass) + "_" + str(self.redshift) + "_"
                     + self.detector["label"] + ".pdf", dpi = 360)
         plt.show()
-
-    def pair_plot(self,
-        x1:list,
-        y1:list,
-        x2:list,
-        y2:list,
-        x_true:float,
-        y_true:float,
-        plot_color:str,
-        xlabel:str,
-        ylabel:str,
-        label:dict,
-        levels = [90],
-        style="both",
-        clabel=False,
-        ):
-        """Create a posterior distribuition plot for two parameters.
-
-        Parameters
-        ----------
-        x : list
-            first parameter sample.
-        y : list
-            secondi parameter sample.
-        x_true : float
-            first parameter true value.
-        y_true : float
-            second parameter true value.
-        plot_color : str
-            plot color.
-        xlabel : str
-            x axis label.
-        ylabel : str
-            y axis label.
-        labels : list
-            values labels.
-        levels : list, optional
-            Confidential intervals, by default [90]
-        style : str, optional
-            Choose to plot true values style {'both', 'point', 'lines'}, by default "both"
-        clabel : bool, optional
-            Show interval labels, by default False
-        """
-    
-        # start plot figure
-        fig, axScatter = plt.subplots(figsize=(10, 10))
-        
-        # create new axes on the right and on the top of the current axes
-        # The first argument of the new_vertical(new_horizontal) method is
-        # the height (width) of the axes to be created in inches.
-        divider = make_axes_locatable(axScatter)
-        axHistx = divider.append_axes("top", 1.5, pad=0., sharex=axScatter)
-        axHisty = divider.append_axes("right", 1.5, pad=0., sharey=axScatter)
-
-        # make some labels invisible
-        # axHistx.axis('off')
-        axHistx.xaxis.set_tick_params(labelbottom=False)
-        axHistx.set_yticks([])
-
-        axHisty.set_xticks([])
-        axHisty.yaxis.set_tick_params(labelleft=False)
-        
-        # plot true values
-        if style=='both':
-            axScatter.scatter(x_true, y_true, marker = '+', color = 'k')
-            axScatter.axvline(x = x_true, lw=2, ls=':', color = 'k', alpha=.5)
-            axScatter.axhline(y = y_true, lw=2, ls=':', color = 'k', alpha=.5)
-        elif style=='point':
-            axScatter.scatter(teste.final_spin, teste.final_mass, marker = '+', color = 'k')
-        elif style=='lines':
-            axScatter.axvline(x = x_true, lw=2, ls=':', color = 'k', alpha=.5)
-            axScatter.axhline(y = y_true, lw=2, ls=':', color = 'k', alpha=.5)
-        i = 0
-        for (x,y) in [(x1,y1), (x2,y2)]:
-
-            # compute density
-            k = gaussian_kde(np.vstack([x, y]))
-            
-            # create grid
-            xi, yi = np.mgrid[x.min():x.max():x.size**0.5*1j,y.min():y.max():y.size**0.5*1j]
-            zi = k(np.vstack([xi.flatten(), yi.flatten()]))
-            
-            #set zi to 0-1 scale
-            zi = (zi-zi.min())/(zi.max() - zi.min())
-            zi =zi.reshape(xi.shape)
-            
-
-            # the scatter plot:
-            # axScatter.scatter(x, y, alpha = 0.05, color = plot_color[i], marker='p')
-                
-            #set up plot
-            origin = 'lower'
-            lvls = []
-            for level in levels:
-                lvls.append(1 - level/100)
-
-            CS = axScatter.contour(xi, yi, zi,levels = lvls,
-                    colors=(plot_color[i],),
-                    linewidths=(2,),
-                    origin=origin)
-
-            # fill inside
-            lvls.append(1)
-
-            axScatter.contourf(xi, yi, zi, levels = lvls,
-                colors=(plot_color[i],),
-                alpha = 0.3,
-                origin=origin,
-                )
-    
-            if clabel == True:
-                axScatter.clabel(CS, fmt=levels, colors = plot_color[i])
-                axScatter.ticklabel_format(axis='y', style='sci', scilimits=(0,0))
-
-
-
-            # axHistx.hist(x, bins = 100, density = True, alpha = 0.3)
-            xx = np.linspace(min(x), max(x),100)
-            x_max = max(np.concatenate((gaussian_kde(x1)(xx),gaussian_kde(x2)(xx))))
-
-            axHistx.fill_between(xx,0,gaussian_kde(x)(xx)/x_max, color = plot_color[i], alpha = 0.3)
-            axHistx.plot(xx,gaussian_kde(x)(xx)/x_max, color = plot_color[i], linewidth = 2)
-            axHistx.axvline(x = np.percentile(x, 5), lw=2, ls='--', color = plot_color[i])
-            axHistx.axvline(x = np.percentile(x, 95), lw=2, ls='--', color = plot_color[i])
-
-
-            # first of all, the base transformation of the data points is needed
-            base = plt.gca().transData
-            rot = transforms.Affine2D().rotate_deg(-90)
-
-            # axHisty.hist(y, bins=100, orientation='horizontal', alpha = 0.2)
-            yy = np.linspace(min(y), max(y),100)
-            y_max = max(np.concatenate((gaussian_kde(y1)(yy),gaussian_kde(y2)(yy))))
-            axHisty.fill_between(-yy,gaussian_kde(y)(yy)/y_max, 0, color = plot_color[i], alpha = 0.3, transform= rot + base)
-            axHisty.plot(-yy, gaussian_kde(y)(yy)/y_max, color = plot_color[i], linewidth = 2, transform= rot + base, label=label[i])
-            axHisty.axhline(y = np.percentile(y, 5), lw=2, ls='--', color = plot_color[i])
-            axHisty.axhline(y = np.percentile(y, 95), lw=2, ls='--', color = plot_color[i])
-
-            i+=1
-            
-        # add this after calling the pair_plot function to remove gap between plots
-        axHistx.set_ylim(0, 1.05)    
-        axHisty.set_xlim(0, 1.05)
-        # axScatter.set_xlim(min(np.concatenate((x1,x2))), max(np.concatenate((x1,x2))))
-        # axScatter.set_ylim(min(np.concatenate((y1,y2))), max(np.concatenate((y1,y2))))
-        
-        axScatter.set_xlim(0.3,0.8)
-        axScatter.set_ylim(120, 170)
-        
-        axScatter.set_xlabel(xlabel)
-        axScatter.set_ylabel(ylabel)
-        plt.legend(bbox_to_anchor=(0,1))
-
-        fig.tight_layout()
 
     def run_sampler(self,
         model:str,
@@ -240,15 +101,15 @@ class EmceeSampler(SourceData):
 
         self.true_pars.choose_theta_true(model, ratio)
         ndim = len(self.true_pars.theta_true)
-        self.nwalkers = 100
-        self.nsteps = 1000
+        self.nwalkers = 50
+        self.nsteps = 1500
         self.thin = 30
-        # self.nwalkers = 30
+        # self.nwalkers = 20
+        # self.nsteps = 500
+        # self.thin = 5
+        # self.nwalkers = 20
         # self.nsteps = 100
         # self.thin = 15
-        self.nwalkers = 50
-        self.nsteps = 800
-        self.thin = 15
 
 
         # pos = self.prior_transform(np.random.rand(self.nwalkers, ndim))
@@ -259,9 +120,8 @@ class EmceeSampler(SourceData):
         self.samples = sampler.get_chain()
         self.flat_samples = sampler.get_chain(discard=int(self.nsteps/2), thin=self.thin, flat=True)
 
-        corner.corner(self.flat_samples, truths=self.true_pars.theta_true, labels = self.true_pars.theta_labels)
-        plt.show()
-
+        # corner.corner(self.flat_samples, truths=self.true_pars.theta_true, labels = self.true_pars.theta_labels)
+        # plt.show()
 
     def _compute_logpdf_function(
         self,
@@ -292,23 +152,6 @@ class EmceeSampler(SourceData):
             self.detector["freq"],
             self.detector["psd"]
             )
-
-    def _plot_parameters(self):
-        plt.rcParams["mathtext.fontset"] = "cm"
-        plt.rcParams["font.family"] = "STIXGeneral"
-        # plt.rcParams["figure.figsize"] = [20, 8]  # plot image size
-
-        SMALL_SIZE = 20
-        MEDIUM_SIZE = 25
-        BIGGER_SIZE = 35
-
-        plt.rc("font", size=SMALL_SIZE)          # controls default text sizes
-        plt.rc("axes", titlesize=MEDIUM_SIZE)     # fontsize of the axes title
-        plt.rc("axes", labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-        plt.rc("xtick", labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
-        plt.rc("ytick", labelsize=MEDIUM_SIZE)    # fontsize of the tick labels
-        plt.rc("legend", fontsize=SMALL_SIZE)    # legend fontsize
-        plt.rc("figure", titlesize=BIGGER_SIZE)
 
 
 class EmceeSamplerMassSpin(SourceData):
@@ -1042,7 +885,7 @@ class EmceeSamplerOmegas(SourceData):
 
 
 if __name__ == '__main__':
-    np.random.seed(1234)
+    np.random.seed(123)
     """GW190521
     final mass = 150.3
     redshift = 0.72
@@ -1067,7 +910,55 @@ if __name__ == '__main__':
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
     # teste = EmceeSamplerMassSpin(modes, modes_model, detector, m_f, z, q, "FH")
-    teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
-    teste.run_sampler('omegas', False)
+    modes2 = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
+    modes2.run_sampler('mass_spin', False)
+    modes1 = EmceeSampler(modes, [modes_model[0]], detector, m_f, z, q, "FH")
+    modes1.run_sampler('mass_spin', False)
+
     # teste.joint_plot_mass_spin('mass_spin', False)
-    # teste.plot()
+
+
+    
+    df2 = pd.DataFrame(modes2.flat_samples, columns=modes2.true_pars.theta_labels)
+    df1 = pd.DataFrame(modes1.flat_samples, columns=modes1.true_pars.theta_labels)
+    m0, m1 = modes_model
+    l0 = '2 modes, fundamental'
+    l1 = '2 modes, overtone'
+    l2 = '1 mode'
+    df_colors = pd.DataFrame({
+        l0: ['tab:blue'],
+        l1: ['tab:red'],
+        l2: ['tab:green'],
+        },
+        index=['color']
+        )
+    
+    df_masses = pd.DataFrame({
+        l0: [df2[r"$M_{{{0}}}$".format(m0)].values],
+        l1: [df2[r"$M_{{{0}}}$".format(m1)].values],
+        l2: [df1[r"$M_{{{0}}}$".format(m0)].values],
+        'true': [modes2.final_mass],
+        'label': [r'final mass [$M_\odot$]'],
+        },
+        index=['y']
+        )
+    df_spins = pd.DataFrame({
+        l0: [df2[r"$a_{{{0}}}$".format(m0)].values],
+        l1: [df2[r"$a_{{{0}}}$".format(m1)].values],
+        l2: [df1[r"$a_{{{0}}}$".format(m0)].values],
+        'true': [modes2.final_spin],
+        'label': [r'final spin [$M_f$]'],
+        },
+        index=['x']
+        )
+    
+    data = df_colors.append([df_masses, df_spins])
+
+    plots = Plots.Plots()
+    plots.pair_plot(data,
+        )
+
+    plt.savefig("figs/mass_spin_2"+str(len(modes2.modes_data))+"data"+str(len(modes2.modes_model))+"model"
+                + str(modes2.final_mass) + "_" + str(modes2.redshift) + "_"
+                + modes2.detector["label"] + ".pdf", dpi = 360)
+    plt.show()
