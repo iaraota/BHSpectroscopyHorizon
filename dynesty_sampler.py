@@ -255,7 +255,7 @@ class Polychord(SourceData):
         for i in range(len(self.modes_model)):
             cube[0+4*i] = transform(0.0, 10,cube[0 + 4*i])
             cube[1+4*i] = transform(0.0, 2*np.pi,cube[1 + 4*i])
-            cube[2+4*i] = transform(0.9, 1,cube[2 + 4*i])
+            cube[2+4*i] = transform(0.2, 1,cube[2 + 4*i])
             cube[3+4*i] = transform(0.0, 0.9999,cube[3 + 4*i])
         return cube
         # cube = np.array(hypercube)
@@ -351,8 +351,9 @@ class Polychord(SourceData):
             omega_r, omega_i = self.transform_mass_spin_to_omegas(
                 M,
                 a,
-                self.modes_model[i],
-                self.fit_coeff[self.modes_model[i]]
+                self.df_a_omegas[self.modes_model[i]],
+                # self.modes_model[i],
+                # self.fit_coeff[self.modes_model[i]]
             )
             h_model += self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
                 self.detector["freq"]*self.time_convert, A, phi, omega_r, omega_i, 
@@ -390,16 +391,27 @@ class Polychord(SourceData):
 
 if __name__ == '__main__':
     np.random.seed(123)
+    """GW190521
+    final mass = 150.3
+    redshift = 0.72
+    spectrocopy horizon = 0.148689
+    """
     m_f = 500
     z = 0.1
     q = 1.5
+
+    m_f = 150.3
+    z = 0.72
+    # z = 0.15
+    # z = 0.05
+    # z = 0.01
     detector = "LIGO"
     modes = ["(2,2,0)"]
-    # modes = ["(2,2,0)", "(2,2,1) I"]
+    modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
     modes_model = ["(2,2,0)"]
-    # modes_model = ["(2,2,0)", "(2,2,1) I"]
+    modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
     teste = Polychord(modes, modes_model, detector, m_f, z, q, "FH")

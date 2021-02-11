@@ -896,9 +896,10 @@ if __name__ == '__main__':
     q = 1.5
 
     m_f = 150.3
-    z = 0.72
-    z = 0.15
-    z = 0.05
+    z = 0.5
+    # z = 0.72
+    # z = 0.15
+    # z = 0.05
     # z = 0.01
     detector = "LIGO"
     # modes = ["(2,2,0)"]
@@ -910,6 +911,8 @@ if __name__ == '__main__':
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
     # teste = EmceeSamplerMassSpin(modes, modes_model, detector, m_f, z, q, "FH")
+    modeskerr = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
+    modeskerr.run_sampler('kerr', False)
     modes2 = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
     modes2.run_sampler('mass_spin', False)
     modes1 = EmceeSampler(modes, [modes_model[0]], detector, m_f, z, q, "FH")
@@ -917,18 +920,19 @@ if __name__ == '__main__':
 
     # teste.joint_plot_mass_spin('mass_spin', False)
 
-
-    
+    dfkerr = pd.DataFrame(modeskerr.flat_samples, columns=modeskerr.true_pars.theta_labels)
     df2 = pd.DataFrame(modes2.flat_samples, columns=modes2.true_pars.theta_labels)
     df1 = pd.DataFrame(modes1.flat_samples, columns=modes1.true_pars.theta_labels)
     m0, m1 = modes_model
     l0 = '2 modes, fundamental'
     l1 = '2 modes, overtone'
     l2 = '1 mode'
+    l3 = '2 modes, kerr'
     df_colors = pd.DataFrame({
         l0: ['tab:blue'],
         l1: ['tab:red'],
         l2: ['tab:green'],
+        l3: ['tab:purple']
         },
         index=['color']
         )
@@ -937,6 +941,7 @@ if __name__ == '__main__':
         l0: [df2[r"$M_{{{0}}}$".format(m0)].values],
         l1: [df2[r"$M_{{{0}}}$".format(m1)].values],
         l2: [df1[r"$M_{{{0}}}$".format(m0)].values],
+        l3: [dfkerr[r"$M_f$"].values],
         'true': [modes2.final_mass],
         'label': [r'final mass [$M_\odot$]'],
         },
@@ -946,6 +951,7 @@ if __name__ == '__main__':
         l0: [df2[r"$a_{{{0}}}$".format(m0)].values],
         l1: [df2[r"$a_{{{0}}}$".format(m1)].values],
         l2: [df1[r"$a_{{{0}}}$".format(m0)].values],
+        l3: [dfkerr[r"$a_f$"].values],
         'true': [modes2.final_spin],
         'label': [r'final spin [$M_f$]'],
         },
@@ -958,7 +964,7 @@ if __name__ == '__main__':
     plots.pair_plot(data,
         )
 
-    plt.savefig("figs/mass_spin_2"+str(len(modes2.modes_data))+"data"+str(len(modes2.modes_model))+"model"
+    plt.savefig("figs/kerr_mass_spin"+str(len(modes2.modes_data))+"data"+str(len(modes2.modes_model))+"model"
                 + str(modes2.final_mass) + "_" + str(modes2.redshift) + "_"
                 + modes2.detector["label"] + ".pdf", dpi = 360)
     plt.show()

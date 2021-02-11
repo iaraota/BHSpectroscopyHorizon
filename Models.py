@@ -395,7 +395,7 @@ class TrueParameters(SourceData):
 
     def _true_kerr(self, ratio:bool):
         self.theta_true = [self.final_mass, self.final_spin]
-        self.theta_labels = [r"$M_f [M_\odot]$", r"$a_f [M_f]$"]
+        self.theta_labels = [r"$M_f$", r"$a_f$"]
         
         for mode in self.modes_model:
             if ratio and (mode != self.modes_model[0]):
