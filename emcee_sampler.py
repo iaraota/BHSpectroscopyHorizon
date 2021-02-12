@@ -120,8 +120,12 @@ class EmceeSampler(SourceData):
         self.samples = sampler.get_chain()
         self.flat_samples = sampler.get_chain(discard=int(self.nsteps/2), thin=self.thin, flat=True)
 
-        # corner.corner(self.flat_samples, truths=self.true_pars.theta_true, labels = self.true_pars.theta_labels)
-        # plt.show()
+        corner.corner(self.flat_samples, truths=self.true_pars.theta_true, labels = self.true_pars.theta_labels)
+
+        plt.savefig("figs/corner/"+str(model)+str(len(self.modes_data))+"data"+str(len(self.modes_model))+"model"
+                    + str(self.final_mass) + "_" + str(self.redshift) + "_"
+                    + self.detector["label"] + ".pdf", dpi = 360)
+        plt.show()
 
     def _compute_logpdf_function(
         self,
@@ -896,21 +900,29 @@ if __name__ == '__main__':
     q = 1.5
 
     m_f = 150.3
-    z = 0.5
+    # z = 0.5
     # z = 0.72
-    # z = 0.15
-    # z = 0.05
-    # z = 0.01
+    z = 0.15
+    z = 0.05
+    z = 0.01
     detector = "LIGO"
-    # modes = ["(2,2,0)"]
-    modes = ["(2,2,0)", "(2,2,1) I"]
+    modes = ["(2,2,0)"]
+    # modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
-    # modes_model = ["(2,2,0)"]
+    modes_model = ["(2,2,0)"]
     modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
-    # teste = EmceeSamplerMassSpin(modes, modes_model, detector, m_f, z, q, "FH")
+    teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
+    teste.run_sampler('df_dtau_sub', False)
+    df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)
+
+
+
+
+def plot_allmasses_spin():
+
     modeskerr = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
     modeskerr.run_sampler('kerr', False)
     modes2 = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
@@ -918,7 +930,6 @@ if __name__ == '__main__':
     modes1 = EmceeSampler(modes, [modes_model[0]], detector, m_f, z, q, "FH")
     modes1.run_sampler('mass_spin', False)
 
-    # teste.joint_plot_mass_spin('mass_spin', False)
 
     dfkerr = pd.DataFrame(modeskerr.flat_samples, columns=modeskerr.true_pars.theta_labels)
     df2 = pd.DataFrame(modes2.flat_samples, columns=modes2.true_pars.theta_labels)
