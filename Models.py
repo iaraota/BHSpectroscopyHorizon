@@ -723,6 +723,76 @@ class Priors(SourceData):
         except:
             raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
 
+    def cube_uniform_prior(
+        self,
+        model:str,
+        ratio,
+        ):
+        """Generate uniform priors parameters. And transform the
+        unit cube 'hypercube ~ Unif[0., 1.)' to real values priors
+        for MultiNest sampling.
+
+        Parameters
+        ----------
+        model : str
+            QNM model. Can be set to {"kerr", "mass_spin",
+            "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}
+
+        ratio : bool
+            Choose true if model has amplitude ratios
+            and False if model fits all amplitudes
+        """
+
+        if not isinstance(ratio, bool):
+            raise ValueError("ratio should be set to True or False")
+
+        models = {
+            "kerr": self._prior_kerr,
+            "mass_spin": self._prior_mass_spin,
+            "df_dtau": self._prior_df_dtau,
+            "df_dtau_sub": self._prior_df_dtau_subdominant,
+            "freq_tau": self._prior_freq_tau,
+            "omegas": self._prior_omegas,
+            }
+
+        try:
+            models[model](ratio)
+            self.prior_function = lambda hypercube: self._hypercube_transform(hypercube, self.prior_min, self.prior_max)
+
+        except:
+            raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
+
+    def _hypercube_transform(
+        self,
+        hypercube,
+        prior_min:list,
+        prior_max:list,
+        ):
+        """Transfor prior to cube unit cube 'hypercube ~ Unif[0., 1.)' 
+        to the parameter of interest for MultiNest sampling .
+
+        Parameters
+        ----------
+        hypercube : array_like
+            Unit cube to be transformed to real values priors.
+        prior_min : list
+            Minimum values in the prior.
+        prior_max : list
+            Maximum values in the prior.
+
+        Returns
+        -------
+        array_like
+            Returns transformed cube from Unif[0,1] to [min, max].
+        """
+        transform = lambda a, b, x: a + (b - a) * x
+
+        cube = np.array(hypercube)
+        for i in range(len(self.prior_min)):
+            cube[i] = transform(self.prior_min[i], self.prior_max[i], cube[i])
+        
+        return cube
+
     def _prior_kerr(self, ratio:bool):
         self.prior_min = [1, 0]
         self.prior_max = [self.final_mass*10, 0.9999]

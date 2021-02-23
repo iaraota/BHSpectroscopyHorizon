@@ -901,21 +901,21 @@ if __name__ == '__main__':
 
     m_f = 150.3
     # z = 0.5
-    # z = 0.72
+    z = 0.72
     z = 0.15
-    z = 0.05
-    z = 0.01
+    # z = 0.05
+    # z = 0.01
     detector = "LIGO"
-    modes = ["(2,2,0)"]
-    # modes = ["(2,2,0)", "(2,2,1) I"]
+    # modes = ["(2,2,0)"]
+    modes = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
     # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
     modes_model = ["(2,2,0)"]
-    modes_model = ["(2,2,0)", "(2,2,1) I"]
+    modes_model = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
     teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
-    teste.run_sampler('df_dtau_sub', False)
+    teste.run_sampler('df_dtau', False)
     df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)
 
 

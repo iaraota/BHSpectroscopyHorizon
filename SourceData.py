@@ -2,6 +2,7 @@ import numpy as np
 from modules import GWFunctions, MCMCFunctions, ImportData, PlotFunctions
 import os
 import pandas as pd
+
 class SourceData:
     """Generate waveforms, noise and injected data
     from choosen QNMs and detector in frequency domain.
