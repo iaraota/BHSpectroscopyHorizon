@@ -1,3 +1,4 @@
+import json
 import numpy as np
 from modules import GWFunctions, MCMCFunctions, ImportData, PlotFunctions
 import os
@@ -41,7 +42,7 @@ class SourceData:
         self.detector = ImportData.import_detector(detector, False)
 
         # get QNM parameters from simulation
-        self.qnm_pars, self.mass_f = ImportData.import_simulation_qnm_parameters(self.q_mass)
+        self.qnm_pars, self.mass_f, self.final_spin = self.import_simulation_qnm_parameters(self.q_mass)
         
         # Compute inifical mass
         self.initial_mass = self.final_mass/self.mass_f
@@ -54,20 +55,7 @@ class SourceData:
         self._compute_qnm_modes()
 
         # compute final spin in final mass units
-        self.final_spin = self.transform_omegas_to_mass_spin(
-                self.qnm_modes["(2,2,0)"].omega_r,
-                self.qnm_modes["(2,2,0)"].omega_i,
-                self.create_a_over_M_omegas_dataframe("(2,2,0)"),
-                self.transf_fit_coeff("(2,2,0)"),
-            )[1]
-
-        self.mass_final = self.transform_omegas_to_mass_spin(
-                self.qnm_modes["(2,2,0)"].omega_r,
-                self.qnm_modes["(2,2,0)"].omega_i,
-                self.create_a_over_M_omegas_dataframe("(2,2,0)"),
-                self.transf_fit_coeff("(2,2,0)"),
-            )[0]
-        self.mass_initial = self.final_mass/self.mass_final
+        self.mass_initial = self.final_mass/self.mass_f
         # compute noise
         self._random_noise()
 
@@ -86,8 +74,8 @@ class SourceData:
         """
         qnm_modes = dict()
         for (k,v) in self.qnm_pars.items():
-            qnm_modes[k] = GWFunctions.QuasinormalMode(v["amplitudes"], v["phases"], v["omega"][0], 
-                            v["omega"][1], self.final_mass, self.redshift, self.mass_f)
+            qnm_modes[k] = GWFunctions.QuasinormalMode(v["amplitudes"], v["phases"], v['omegas']['omega_r'], 
+                            v['omegas']['omega_i'], self.final_mass, self.redshift, self.mass_f)
             qnm_modes[k].qnm_f = {
                 "real": qnm_modes[k].qnm_fourier(self.detector["freq"],
                         "real", self.ft_convention, "SI"),
@@ -141,7 +129,7 @@ class SourceData:
         tuple
             Fit coefficients f1, f2, f3, q1, q2, q3 for the chosen mode.
         """
-        file_path = os.path.join(os.getcwd(), "..", "fitcoeffsWEB.dat")
+        file_path = os.path.join(os.getcwd(), "..", "fitcoeffs.dat")
         l = float(mode[1])
         m = float(mode[3])
         n = float(mode[5])
@@ -160,6 +148,22 @@ class SourceData:
         self,
         mode:str,
         ):
+        """Creates a pandas DataFrame with a/M as index
+        and M*omega_r and M*omega_i as columnns. Data 
+        file available at 
+        https://pages.jh.edu/eberti2/ringdown/
+
+        Parameters
+        ----------
+        mode : str
+            '(l,m,n)' mode to get the DataFrame.
+
+        Returns
+        -------
+        pandas DataFrame
+            DataFrame with a/M as index and M*omega_r 
+            and M*omega_i as columnns.
+        """
 
         files = np.genfromtxt(f'../frequencies_l{mode[1]}/n{str(int(mode[5])+1)}l{mode[1]}m{mode[3]}.dat', usecols=range(3))
 
@@ -167,14 +171,11 @@ class SourceData:
 
         return df
 
-
     def transform_mass_spin_to_omegas(
         self,
         M:float,
         a_over_M:float,
-        df,
-        # mode:str,
-        # fit_coeff:list,
+        df:'DataFrame',
         ):
         """Transform mass and spin do quasinormal mode omegas (frequencies)
 
@@ -183,12 +184,13 @@ class SourceData:
         M : float
             Black hole final mass in units of initial mass.
             (M_final/M_initial)
-        a : float
-            Black hole spin in units of initial mass.
-        fit_coeff : array_like
-            Fits coefficient to Kerr QNM frequencies. 
-            See transf_fit_coeff method or  
-            https://pages.jh.edu/eberti2/ringdown/
+        a_over_M : float
+            Black hole spin in units of initial final mass.
+        df : pandas DataFrame
+            DataFrame containing a_over_M as index, omega_r
+            and omega_i columns (in units of final mass). 
+            Dataframe values computed with method 
+            'create_a_over_M_omegas_dataframe'.
 
         Returns
         -------
@@ -197,17 +199,6 @@ class SourceData:
         """
         omega_r = df.loc[round(a_over_M,4)].omega_r/M
         omega_i = df.loc[round(a_over_M,4)].omega_i/M
-
-        # files = np.genfromtxt(f'../frequencies_l{mode[1]}/n{str(int(mode[5])+1)}l{mode[1]}m{mode[3]}.dat', usecols=range(3))
-        # for i in range(len(files)):
-        #     if files[i][0] == round(a_over_M,4): 
-        #         omega_r = files[i][1]/M
-        #         omega_i = -files[i][2]/M
-        #         break
-
-        # f1,f2,f3,q1,q2,q3 = fit_coeff
-        # omega_r = (f1 + f2*(1 - a_over_M)**f3)/M
-        # omega_i = omega_r/(2*(q1 + q2*(1 - a_over_M)**q3))
         return omega_r, omega_i
 
     def transform_omegas_to_mass_spin(
@@ -236,22 +227,47 @@ class SourceData:
             Black hole mass and spin both in units of initial mass.
         """
 
-
-
-
         f1,f2,f3,q1,q2,q3 = fit_coeff
 
         factor = ((omega_r/(2*omega_i) - q1)/q2)**(1/q3)
-        # M = (f1 + f2*factor**f3)/omega_r
+        M = (f1 + f2*factor**f3)/omega_r
         a_over_M = (1 - factor)
-        # a in units of final mass
-        # a = a_over_M*M 
+        
         
         wr_aux = df.loc[round(a_over_M,4)].omega_r
         wi_aux = df.loc[round(a_over_M,4)].omega_i
         M = wr_aux/omega_r
 
         return M, a_over_M
+
+    def import_simulation_qnm_parameters(
+        self,
+        q_mass,
+        ):
+        folders_path = os.path.join(os.getcwd(), "../simulations")
+        for folders in os.listdir(folders_path):
+            if folders.find(str(q_mass)) != -1:     
+                simu_folder = folders_path+'/'+folders+'/data/qnm_pars/'
+
+                parameters = {}
+                for par in ('ratios', 'amplitudes', 'phases', 'omegas', 'bh_pars'):
+                    with open(f'{simu_folder}{par}.json', 'r') as file:
+                        parameters[par] = json.load(file)
+                        
+        parameters['omegas']['(2,2,1) I'] = parameters['omegas']['(2,2,1)']
+        parameters['omegas']['(2,2,1) II'] = parameters['omegas']['(2,2,1)']
+
+        mass_f = parameters['bh_pars']['remnant_mass']
+        final_spin = parameters['bh_pars']['remnant_spin']
+        del parameters['bh_pars']
+
+        modes = {}
+        for mode in parameters['ratios']:
+            modes[mode] = {}
+            for (par, value) in parameters.items():
+                modes[mode][par] = value[mode]
+
+        return modes, mass_f, final_spin
 
 
     def __str__(self):
@@ -284,10 +300,10 @@ if __name__ == '__main__':
     fits = teste.transf_fit_coeff("(2,2,0)")
     df = teste.create_a_over_M_omegas_dataframe("(2,2,0)")
     M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i,df, fits)
-    # omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, "(2,2,0)", fits)
+    omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, df)
     # M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
     print(teste.mass_f)
+    print(teste.final_spin)
     print(M, a)
-    print(teste.mass_initial*teste.mass_final)
     print(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i)
-    # print(omega_r, omega_i)
+    print(omega_r, omega_i)
