@@ -2,6 +2,8 @@ import numpy as np
 
 from SourceData import SourceData
 from modules import GWFunctions, MCMCFunctions
+from modules.PhysConst import UnitsToSeconds
+
 
 class Models(SourceData):
     """Generate waveform model function of QNMs."""
@@ -48,7 +50,6 @@ class Models(SourceData):
                 raise ValueError("ratio should be set to True or False")
             else:
                 raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
-
 
     def kerr_amplitude(self, theta:list):
         """QNM model with mass and spin as parameters.
@@ -230,25 +231,28 @@ class Models(SourceData):
         self,
         theta:list,
         ):
-        """Compute QNM parameters (A, phi, omega_r, omega_i) given [M, a] + [A, phi]*num_modes
-        create self.theta_model list
+        """Compute QNM parameters (A, phi, freq, tau) given [M, a] + [A0, phi0] +
+        [R, phi]*num_modes
+        create self.theta_model list. M is the final mass in the detector frame.
 
         Parameters
         ----------
         theta : list
-            injected parameters to the model [M,a] + [A, phi]*num_modes
+            injected parameters to the model [M,a] + [A0, phi0] + [R, phi]*num_modes
         """
         theta_model = []
         M, a = theta[:2]
-        M = M/self.mass_initial
+        convert_freqs = M*UnitsToSeconds.tSun
         for i in range(len(self.modes_model)):
-            A, phi = theta[2 + 2*i: 4 + 2*i]
+            R, phi = theta[2 + 2*i: 4 + 2*i]
             omega_r, omega_i = self.transform_mass_spin_to_omegas(
-                M,
+                1,
                 a,
                 self.df_a_omegas[self.modes_model[i]],
                 )
-            theta_model.extend([A, phi, omega_r, omega_i])
+            freq = omega_r/2/np.pi/convert_freqs
+            tau = convert_freqs/omega_i
+            theta_model.extend([R, phi, freq, tau])
         return theta_model
 
     def _parameters_mass_spin(
@@ -361,33 +365,6 @@ class Models(SourceData):
             theta_model.extend([A, phi, omega_r, omega_i])
         return theta_model
 
-    def _convert_ratio(
-        self,
-        theta:list,
-        ):
-        """Transform amplitude of sub-dominant modes in amplitude
-        ratio A_i/A_0
-
-        Parameters
-        ----------
-        theta : list
-            QNM model parameters
-        parameter_function : function
-            Function that converts model parameters to
-            (A, phi, omega_r, omega_i)*num_modes
-
-        Returns
-        -------
-        list
-            Model parameters with amplitude ratios.
-        """
-        # TODO: this is bugged!
-
-        for i in range(1,len(self.modes_model)):
-            theta[4*i] *= theta[0]
-
-        return theta
-
     def _model_function(self,
         theta:list,
         parameter_function,
@@ -409,39 +386,70 @@ class Models(SourceData):
         """
         h_model = 0
         theta_model = parameter_function(theta)
-        for i in range(len(self.modes_model)):
-            A, phi, omega_r, omega_i = theta_model[0 + 4*i: 4 + 4*i]
-            h_model += self._h_model_qnm(A, phi, omega_r, omega_i)
+        # theta_model should have the form [A0, phi0, freq0, tau0, A1, phi1, ...]
 
+        A0, phi0, freq0, tau0 = theta_model[0:4]
+        
+        # Fitted A0 will be A0*[Solar mass in seconds]/[Gpc in seconds]
+        amplitude = A0*UnitsToSeconds.tSun/(UnitsToSeconds.Dist*1e3)
+        
+        # amplitude ratio between first model and dominant = 1 
+        h_model = self._h_model_qnm(1, phi0, freq0, tau0)
+
+        for i in range(1,len(self.modes_model)):
+            R, phi, freq, tau = theta_model[0 + 4*i: 4 + 4*i]
+            h_model += self._h_model_qnm(R, phi, freq, tau)
+
+        h_model *= amplitude
         return h_model
 
     def _h_model_qnm(self,
-        A:float,
+        R:float,
         phi:float,
-        omega_r:float,
-        omega_i:float,
+        freq:float,
+        tau:float,
         ):
         """Quasinormal mode model function.
 
         Parameters
         ----------
-        A : float
-            Amplitude
+        R : float
+            Amplitude ratio between mode and dominant mode.
         phi : float
-            phase
-        omega_r : float
-            real frequency in code units (initial mass units)
-        omega_i : float
-            imaginary frequency in code units
+            QNM phase.
+        freq : float
+            frequency of oscilation in Herz
+        tau : float
+            decay time in seconds.
 
         Returns
         -------
         array
             Returns QNM in frequency domain and SI units.
         """
-        return self.time_convert*self.amplitude_scale*GWFunctions.compute_qnm_fourier(
-                self.detector["freq"]*self.time_convert, A, phi, omega_r, omega_i, 
-                part = "real", convention = self.ft_convention)
+        angular_mean = np.sqrt(1/5/4/np.pi)
+        # angular_mean = 1
+
+        h_real=  GWFunctions.compute_qnm_fourier(
+            self.detector["freq"],
+            R,
+            phi,
+            freq=freq,
+            tau=tau,
+            part = "real",
+            convention = self.ft_convention
+            )
+        h_imag=  GWFunctions.compute_qnm_fourier(
+            self.detector["freq"],
+            R,
+            phi,
+            freq=freq,
+            tau=tau,
+            part = "imag",
+            convention = self.ft_convention
+            )
+        
+        return angular_mean*(h_real+ h_imag)
 
 
 class TrueParameters(SourceData):
@@ -490,27 +498,33 @@ class TrueParameters(SourceData):
             raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
 
     def _true_kerr(self, ratio:bool):
-        self.theta_true = [self.final_mass, self.final_spin]
-        self.theta_labels = [r"$M_f$", r"$a_f$"]
+        self.theta_true = [self.final_mass*(1+self.redshift), self.final_spin]
+        self.theta_labels = [r"$M_f(1+z)$", r"$a_f$"]
         
         for mode in self.modes_model:
-            if ratio and (mode != self.modes_model[0]):
+            if mode == self.modes_model[0]:
                 self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
-                    float(self.qnm_modes[mode].phase)
-                    ])
-                self.theta_labels.extend([
-                    r"$R_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    ])
-            else:
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude,
+                    (
+                        self.qnm_modes[mode].amplitude*
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                    ),
                     float(self.qnm_modes[mode].phase),
                     ])
 
                 self.theta_labels.extend([
-                    r"$A_{{{0}}}$".format(mode),
+                    r"$A_{{{0}}}M_f(1+z)/D_L$".format(mode),
+                    r"$\phi_{{{0}}}$".format(mode),
+                    ])
+            
+            else:
+                self.theta_true.extend([
+                    self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
+                    float(self.qnm_modes[mode].phase),
+                    ])
+
+                self.theta_labels.extend([
+                    r"$R_{{{0}}}$".format(mode),
                     r"$\phi_{{{0}}}$".format(mode),
                     ])
 
@@ -795,15 +809,18 @@ class Priors(SourceData):
 
     def _prior_kerr(self, ratio:bool):
         self.prior_min = [1, 0]
-        self.prior_max = [self.final_mass*10, 0.9999]
+        self.prior_max = [self.final_mass*(1+self.redshift)*10, 0.9999]
 
         for mode in self.modes_model:
             self.prior_min.extend([
                 0,
                 0,
             ])
-            if ratio and (mode != self.modes_model[0]):
-                A_max = 1
+            if mode == self.modes_model[0]:
+                A_max = 10*(
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                        )
             else:
                 A_max = 10
 
@@ -935,10 +952,14 @@ if __name__ == '__main__':
 
     detector = "LIGO"
     modes = ["(2,2,0)", "(2,2,1) I"]
+    modes = ["(2,2,0)"]
     teste = Models(modes, detector, m_f, z, q, "FH")
     print(teste._parameters_kerr_mass_spin([m_f, teste.final_spin, 1, 2, 3, 4]))
 
-    # import matplotlib.pyplot as plt
-    # plt.loglog(teste.freq_tau_ratio([1, 1, 0.5, 0.1, 0.5, 1, 0.6, 0.7]))
-    # plt.show()
+    wave = teste._model_function([m_f, teste.final_spin,0.4*(m_f*(1+z))/teste.dist_Gpc, 2], teste._parameters_kerr_mass_spin)
+    print(wave)
+    import matplotlib.pyplot as plt
+    plt.loglog(teste.detector["freq"],teste.detector["psd"],)
+    plt.loglog(teste.detector["freq"], np.abs(wave))
+    plt.show()
     # teste.plot()

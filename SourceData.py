@@ -52,6 +52,7 @@ class SourceData:
             self.final_mass, self.redshift, self.mass_f)
 
         # compute QNMs waveforms
+        self.dist_Gpc = GWFunctions.luminosity_distance(self.redshift)*1e-3
         self._compute_qnm_modes()
 
         # compute final spin in final mass units
@@ -100,8 +101,14 @@ class SourceData:
         # d = n
         self.data = np.copy(self.noise)
         # d = n + modes
+        angular_mean = np.sqrt(1/5/4/np.pi)
+        # angular_mean = 1
+
         for mode in modes_data:
-            self.data += self.qnm_modes[mode].qnm_f["real"]
+            self.data += angular_mean*(
+                self.qnm_modes[mode].qnm_f["real"]
+                + self.qnm_modes[mode].qnm_f["imag"]
+            )
 
     def transf_fit_coeff(
         self,

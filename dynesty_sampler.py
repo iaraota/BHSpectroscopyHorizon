@@ -93,13 +93,14 @@ if __name__ == '__main__':
     z = 0.15
     z = 0.05
     z = 0.01
+    m_f = 3e3
     detector = "LIGO"
     modes = ["(2,2,0)"]
-    # modes = ["(2,2,0)", "(2,2,1) I"]
+    modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
     modes_model = ["(2,2,0)"]
-    # modes_model = ["(2,2,0)", "(2,2,1) I"]
+    modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
     teste = DynestySampler(modes, modes_model, detector, m_f, z, q, "FH")
