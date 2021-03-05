@@ -37,9 +37,8 @@ class EmceeSampler(SourceData):
 
     def joint_plot_mass_spin(self,
         model,
-        ratio,
         ):
-        self.run_sampler(model, ratio)
+        self.run_sampler(model)
 
         df = pd.DataFrame(self.flat_samples, columns=self.true_pars.theta_labels)
         m0, m1 = self.modes_model
@@ -83,7 +82,6 @@ class EmceeSampler(SourceData):
 
     def run_sampler(self,
         model:str,
-        ratio:bool,
         ):
         """Run MCMC sampler.
 
@@ -92,14 +90,10 @@ class EmceeSampler(SourceData):
         model : str
             QNM model. Can be set to {"kerr", "mass_spin",
             "freq_tau", "omegas"}
-
-        ratio : bool
-            Choose true if model has amplitude ratios
-            and False if model fits all amplitudes
         """
-        self._compute_logpdf_function(model, ratio)
+        self._compute_logpdf_function(model)
 
-        self.true_pars.choose_theta_true(model, ratio)
+        self.true_pars.choose_theta_true(model)
         print(self.true_pars.theta_true)
         ndim = len(self.true_pars.theta_true)
         self.nwalkers = 50
@@ -131,7 +125,6 @@ class EmceeSampler(SourceData):
     def _compute_logpdf_function(
         self,
         model:str,
-        ratio:bool,
         ):
         """Generate log of probability density function.
 
@@ -140,14 +133,10 @@ class EmceeSampler(SourceData):
         model : str
             QNM model. Can be set to {"kerr", "mass_spin",
             "freq_tau", "omegas"}
-
-        ratio : bool
-            Choose true if model has amplitude ratios
-            and False if model fits all amplitudes
         """
         #TODO: choose prior other than uniform
-        self.models.choose_model(model, ratio)
-        self.priors.uniform_prior(model, ratio)
+        self.models.choose_model(model)
+        self.priors.uniform_prior(model)
 
         self.log_pdf = lambda theta: MCMCFunctions.log_probability_qnm(
             theta,
@@ -161,7 +150,7 @@ class EmceeSampler(SourceData):
 
 
 if __name__ == '__main__':
-    np.random.seed(123)
+    # np.random.seed(123)
     """GW190521
     final mass = 150.3
     redshift = 0.72
@@ -175,24 +164,30 @@ if __name__ == '__main__':
     # z = 0.5
     z = 0.72
     z = 0.15
-    z = 0.05
     z = 0.1
-    m_f = 1e4
+    # z = 0.05
+    # z = 0.01
+    # m_f = 5e2
+    # m_f = 63
+    z = 0.1
     detector = "LIGO"
-    detector = "CE"
+    # detector = "CE"
     modes = ["(2,2,0)"]
-    modes = ["(2,2,0)", "(2,2,1) II"]
+    # modes = ["(2,2,0)", "(2,2,1) II"]
     # modes = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    modes = ["(2,2,0)", "(4,4,0)"]
+    # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
     modes_model = ["(2,2,0)"]
-    modes_model = ["(2,2,0)", "(2,2,1) II"]
+    # modes_model = ["(2,2,0)", "(2,2,1) II"]
     # modes_model = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    modes_model = ["(2,2,0)", "(4,4,0)"]
+    # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
+
+    m_f, z = 8.774918735010294, 0.03239742629528197
+    m_f, z = 649.1219576310824, 0.4442706749606883	
     teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
-    teste.run_sampler('kerr', False)
-    df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)
+    teste.run_sampler('freq_tau')
+    # df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)
 
 
 

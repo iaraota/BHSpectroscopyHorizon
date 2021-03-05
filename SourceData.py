@@ -102,12 +102,12 @@ class SourceData:
         self.data = np.copy(self.noise)
         # d = n + modes
         angular_mean = np.sqrt(1/5/4/np.pi)
-        # angular_mean = 1
+        angular_mean = 1
 
         for mode in modes_data:
             self.data += angular_mean*(
                 self.qnm_modes[mode].qnm_f["real"]
-                + self.qnm_modes[mode].qnm_f["imag"]
+                # + self.qnm_modes[mode].qnm_f["imag"]
             )
 
     def transf_fit_coeff(

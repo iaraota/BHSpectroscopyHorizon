@@ -18,40 +18,46 @@ class Models(SourceData):
 
     def choose_model(self,
         model:str,
-        ratio:bool,
         ):
         """Choose QNM model.
 
         Parameters
         ----------
         model : str
-            QNM model. Can be set to {"kerr", "mass_spin",
-            "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}
-
-        ratio : bool
-            Choose true if model has amplitude ratios
-            and False if model fits all amplitudes
+            QNM model. Can be set to {"freq_tau", "kerr",
+            "mass_spin", "df_dtau", "df_dtau_sub"}
         """
 
         models = {
-            "kerr": {False: self.kerr_amplitude, True: self.kerr_ratio},
-            "mass_spin": {False: self.mass_spin_amplitude, True: self.mass_spin_ratio},
-            "df_dtau": {False: self.df_dtau_amplitude},
-            "df_dtau_sub": {False: self.df_dtau_subdominant_amplitude},
-            "freq_tau": {False: self.freq_tau_amplitude, True: self.freq_tau_ratio},
-            "omegas": {False: self.omegas_amplitude, True: self.omegas_ratio},
+            "freq_tau": self.freq_tau_model,
+            "kerr": self.kerr_model,
+            "mass_spin": self.mass_spin_model,
+            "df_dtau": self.df_dtau_model,
+            "df_dtau_sub": self.df_dtau_subdominant_model,
             }
 
         try:
-            self.model = models[model][ratio]
+            self.model = models[model]
 
         except:
-            if not isinstance(ratio, bool):
-                raise ValueError("ratio should be set to True or False")
-            else:
-                raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
+            raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
 
-    def kerr_amplitude(self, theta:list):
+    def freq_tau_model(self, theta:list):
+        """QNM model with frequency and decay time as parameters.
+
+        Parameters
+        ----------
+        theta : list
+            [A, phi, f, tau]*num_mode
+
+        Returns
+        -------
+        function
+            QNM model as a function of theta.
+        """
+        return self._model_function(theta, self._parameters_freq_tau)
+
+    def kerr_model(self, theta:list):
         """QNM model with mass and spin as parameters.
         Assuming the no-hair theorem, frequencies of
         all modes are computed from the same mass and
@@ -69,27 +75,7 @@ class Models(SourceData):
         """
         return self._model_function(theta, self._parameters_kerr_mass_spin)
 
-    def kerr_ratio(self, theta:list):
-        """QNM model with mass and spin as parameters.
-        Assuming the no-hair theorem, frequencies of
-        all modes are computed from the same mass and
-        spin.
-
-        Parameters
-        ----------
-        theta : list
-            [M,a] + [R, phi]*num_mode
-            R = A_i/A_0 and A_0 for i = 0
-
-        Returns
-        -------
-        function
-            QNM model as a function of theta.
-        """
-        theta = self._convert_ratio(theta)
-        return self._model_function(theta, self._parameters_kerr_mass_spin)
-
-    def mass_spin_amplitude(self, theta:list):
+    def mass_spin_model(self, theta:list):
         """QNM model with mass and spin as parameters.
         It is not assuming the no-hair theorem, has a
         mass and a spin for each mode.
@@ -106,26 +92,7 @@ class Models(SourceData):
         """
         return self._model_function(theta, self._parameters_mass_spin)
 
-    def mass_spin_ratio(self, theta:list):
-        """QNM model with mass and spin as parameters.
-        It is not assuming the no-hair theorem, has a
-        mass and a spin for each mode.
-
-        Parameters
-        ----------
-        theta : list
-            [R, phi, M, a]*num_mode
-            R = A_i/A_0 and A_0 for i = 0
-
-        Returns
-        -------
-        function
-            QNM model as a function of theta.
-        """
-        theta = self._convert_ratio(theta)
-        return self._model_function(theta, self._parameters_mass_spin)
-
-    def df_dtau_amplitude(self, theta:list):
+    def df_dtau_model(self, theta:list):
         """QNM model with frequency and decay time as parameters.
 
         Parameters
@@ -140,7 +107,7 @@ class Models(SourceData):
         """
         return self._model_function(theta, self._parameter_df_dtau)
 
-    def df_dtau_subdominant_amplitude(self, theta:list):
+    def df_dtau_subdominant_model(self, theta:list):
         """QNM model with frequency and decay time as parameters.
 
         Parameters
@@ -155,76 +122,18 @@ class Models(SourceData):
         """
         return self._model_function(theta, self._parameter_df_dtau_subdominant)
 
-    def freq_tau_amplitude(self, theta:list):
-        """QNM model with frequency and decay time as parameters.
-
-        Parameters
-        ----------
-        theta : list
-            [A, phi, f, tau]*num_mode
-
-        Returns
-        -------
-        function
-            QNM model as a function of theta.
-        """
-        return self._model_function(theta, self._parameter_freq_tau)
-
-    def freq_tau_ratio(self, theta:list):
-        """QNM model with frequency and decay time as parameters.
-
-        Parameters
-        ----------
-        theta : list
-            [R, phi, f, tau]*num_mode
-            R = A_i/A_0 and A_0 for i = 0
-
-        Returns
-        -------
-        function
-            QNM model as a function of theta.
-        """
-        theta = self._convert_ratio(theta)
-        return self._model_function(theta, self._parameter_freq_tau)
-
-    def omegas_amplitude(self, theta:list):
-        """QNM model with numerical units (time in untis of initial mass) 
-        frequencies as parameters.
-
-        Parameters
-        ----------
-        theta : list
-            [A, phi, omega_r, omega_i]*num_mode
-
-        Returns
-        -------
-        function
-            QNM model as a function of theta.
-        """
-        return self._model_function(theta, self._parameters_omegas)
-
-    def omegas_ratio(self, theta:list):
-        """QNM model with numerical units (time in untis of initial mass) 
-        frequencies as parameters.
-
-        Parameters
-        ----------
-        theta : list
-            [R, phi, omega_r, omega_i]*num_mode
-            R = A_i/A_0 and A_0 for i = 0
-
-        Returns
-        -------
-        function
-            QNM model as a function of theta.
-        """
-        theta = self._convert_ratio(theta)
-        return self._model_function(theta, self._parameters_omegas)
-
-    def _parameters_omegas(
+    def _parameters_freq_tau(
         self,
         theta:list,
         ):
+        """Compute QNM parameters (A, phi, freq, tau) given [A, phi, freq, tau]*num_modes
+        create self.theta_model list
+
+        Parameters
+        ----------
+        theta : list
+            injected parameters to the model [A, phi, freq, tau]*num_modes
+        """      
         return theta
 
     def _parameters_kerr_mass_spin(
@@ -251,7 +160,7 @@ class Models(SourceData):
                 self.df_a_omegas[self.modes_model[i]],
                 )
             freq = omega_r/2/np.pi/convert_freqs
-            tau = convert_freqs/omega_i
+            tau = 1e3*convert_freqs/omega_i
             theta_model.extend([R, phi, freq, tau])
         return theta_model
 
@@ -259,82 +168,27 @@ class Models(SourceData):
         self,
         theta:list,
         ):
-        """Compute QNM parameters (A, phi, omega_r, omega_i) given [A, phi, M, A]*num_modes
+        """Compute QNM parameters (A or R, phi, omega_r, omega_i) given [A or R, phi, M, A]*num_modes
         create self.theta_model list
 
         Parameters
         ----------
         theta : list
-            injected parameters to the model [A, phi, M, A]*num_modes
+            injected parameters to the model [A or R, phi, M, A]*num_modes
         """
         theta_model = []
         
         for i in range(len(self.modes_model)):
             A, phi, M, a = theta[0 + 4*i: 4 + 4*i]
-            M = M/self.mass_initial
+            convert_freqs = M*UnitsToSeconds.tSun
             omega_r, omega_i = self.transform_mass_spin_to_omegas(
-                M,
+                1,
                 a,
                 self.df_a_omegas[self.modes_model[i]],
                 )
-            theta_model.extend([A, phi, omega_r, omega_i])
-        return theta_model
-
-    def _parameter_freq_tau(
-        self,
-        theta:list,
-        ):
-        """Compute QNM parameters (A, phi, omega_r, omega_i) given [A, phi, freq, tau]*num_modes
-        create self.theta_model list
-
-        Parameters
-        ----------
-        theta : list
-            injected parameters to the model [A, phi, freq, tau]*num_modes
-        """        
-        
-        theta_model = []
-        for i in range(len(self.modes_model)):
-            A, phi, freq, tau = theta[0 + 4*i: 4 + 4*i]
-            tau *= 1e-3
-            omega_r = freq*2*np.pi*self.time_convert
-            omega_i = self.time_convert/tau
-
-            theta_model.extend([A, phi, omega_r, omega_i])   
-
-        return theta_model
-
-    def _parameter_df_dtau_subdominant(
-        self,
-        theta:list,
-        ):
-        """Compute QNM parameters (A, phi, omega_r, omega_i) given [M, a] + [A, phi, dfreq, dtau]*num_modes
-        create self.theta_model list
-
-        Parameters
-        ----------
-        theta : list
-            injected parameters to the model [M, a] + [A, phi, dfreq, dtau]*num_modes
-        """        
-        
-        theta_model = []
-        M, a = theta[:2]
-        M = M/self.mass_initial
-        delta_omega_r, delta_omega_i = {}, {}
-        delta_omega_r[self.modes_model[0]] = 0
-        delta_omega_i[self.modes_model[0]] = 0
-        delta_omega_r[self.modes_model[1]] = theta[2]
-        delta_omega_i[self.modes_model[1]] = theta[3]
-        for i in range(len(self.modes_model)):
-            A, phi = theta[4 + 2*i: 6 + 2*i]
-            omega_r_GR, omega_i_GR = self.transform_mass_spin_to_omegas(
-                M,
-                a,
-                self.df_a_omegas[self.modes_model[i]],
-                )
-            omega_r = omega_r_GR*(1 + delta_omega_r[self.modes_model[i]])
-            omega_i = omega_i_GR*(1 + delta_omega_i[self.modes_model[i]])
-            theta_model.extend([A, phi, omega_r, omega_i])
+            freq = omega_r/2/np.pi/convert_freqs
+            tau = 1e3*convert_freqs/omega_i
+            theta_model.extend([A, phi, freq, tau])
         return theta_model
 
     def _parameter_df_dtau(
@@ -352,9 +206,9 @@ class Models(SourceData):
         
         theta_model = []
         M, a = theta[:2]
-        M = M/self.mass_initial
+        convert_freqs = M*UnitsToSeconds.tSun
         for i in range(len(self.modes_model)):
-            A, phi, delta_omega_r, delta_omega_i = theta[2 + 4*i: 6 + 4*i]
+            R, phi, delta_omega_r, delta_omega_i = theta[2 + 4*i: 6 + 4*i]
             omega_r_GR, omega_i_GR = self.transform_mass_spin_to_omegas(
                 M,
                 a,
@@ -362,7 +216,46 @@ class Models(SourceData):
                 )
             omega_r = omega_r_GR*(1 + delta_omega_r)
             omega_i = omega_i_GR*(1 + delta_omega_i)
-            theta_model.extend([A, phi, omega_r, omega_i])
+
+            freq = omega_r/2/np.pi/convert_freqs
+            tau = 1e3*convert_freqs/omega_i
+            theta_model.extend([R, phi, freq, tau])
+        return theta_model
+
+    def _parameter_df_dtau_subdominant(
+        self,
+        theta:list,
+        ):
+        """Compute QNM parameters (A, phi, omega_r, omega_i) given [M, a] + [A, phi, dfreq, dtau]*num_modes
+        create self.theta_model list
+
+        Parameters
+        ----------
+        theta : list
+            injected parameters to the model [M, a] + [A, phi, dfreq, dtau]*num_modes
+        """        
+        
+        theta_model = []
+        M, a = theta[:2]
+        convert_freqs = M*UnitsToSeconds.tSun
+        delta_omega_r, delta_omega_i = {}, {}
+        delta_omega_r[self.modes_model[0]] = 0
+        delta_omega_i[self.modes_model[0]] = 0
+        delta_omega_r[self.modes_model[1]] = theta[2]
+        delta_omega_i[self.modes_model[1]] = theta[3]
+        for i in range(len(self.modes_model)):
+            R, phi = theta[4 + 2*i: 6 + 2*i]
+            omega_r_GR, omega_i_GR = self.transform_mass_spin_to_omegas(
+                1,
+                a,
+                self.df_a_omegas[self.modes_model[i]],
+                )
+            omega_r = omega_r_GR*(1 + delta_omega_r[self.modes_model[i]])
+            omega_i = omega_i_GR*(1 + delta_omega_i[self.modes_model[i]])
+
+            freq = omega_r/2/np.pi/convert_freqs
+            tau = 1e3*convert_freqs/omega_i
+            theta_model.extend([R, phi, freq, tau])
         return theta_model
 
     def _model_function(self,
@@ -384,21 +277,23 @@ class Models(SourceData):
         function
             Waveform model as a function of parameters theta.
         """
-        h_model = 0
+
         theta_model = parameter_function(theta)
         # theta_model should have the form [A0, phi0, freq0, tau0, A1, phi1, ...]
 
         A0, phi0, freq0, tau0 = theta_model[0:4]
-        
-        # Fitted A0 will be A0*[Solar mass in seconds]/[Gpc in seconds]
-        amplitude = A0*UnitsToSeconds.tSun/(UnitsToSeconds.Dist*1e3)
-        
-        # amplitude ratio between first model and dominant = 1 
-        h_model = self._h_model_qnm(1, phi0, freq0, tau0)
 
+        # Fitted A0 will be A_mode*final_mass[solar masses]/(luminosity distance [Gpc])
+        amplitude = A0*UnitsToSeconds.tSun/(UnitsToSeconds.Dist*1e3)
+        # amplitude = A0
+        # amplitude ratio between first model and dominant = 1 
+        # tau is fitted in [ms]
+        h_model = self._h_model_qnm(1, phi0, freq0, tau0*1e-3)
+
+        # add more modes to data
         for i in range(1,len(self.modes_model)):
             R, phi, freq, tau = theta_model[0 + 4*i: 4 + 4*i]
-            h_model += self._h_model_qnm(R, phi, freq, tau)
+            h_model += self._h_model_qnm(R, phi, freq, tau*1e-3)
 
         h_model *= amplitude
         return h_model
@@ -427,8 +322,8 @@ class Models(SourceData):
         array
             Returns QNM in frequency domain and SI units.
         """
-        angular_mean = np.sqrt(1/5/4/np.pi)
-        # angular_mean = 1
+        # angular_mean = np.sqrt(1/5/4/np.pi)
+        angular_mean = 1
 
         h_real=  GWFunctions.compute_qnm_fourier(
             self.detector["freq"],
@@ -449,8 +344,7 @@ class Models(SourceData):
             convention = self.ft_convention
             )
         
-        return angular_mean*(h_real+ h_imag)
-
+        return angular_mean*(h_real)#+ h_imag)
 
 class TrueParameters(SourceData):
     """Generate true parameters of injected QNMs."""
@@ -466,7 +360,6 @@ class TrueParameters(SourceData):
     def choose_theta_true(
         self,
         model:str,
-        ratio,
         ):
         """Generate a list of the true injected parameters.
 
@@ -475,29 +368,52 @@ class TrueParameters(SourceData):
         model : str
             QNM model. Can be set to {"kerr", "mass_spin",
             "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}
-
-        ratio : bool
-            Choose true if model has amplitude ratios
-            and False if model fits all amplitudes
         """
-        if not isinstance(ratio, bool):
-            raise ValueError("ratio should be set to True or False")
-
         models = {
             "kerr": self._true_kerr,
             "mass_spin": self._true_mass_spin,
             "df_dtau": self._true_df_dtau,
-            "df_dtau_sub": self._true_df_dtau_subdominant,
             "freq_tau": self._true_freq_tau,
-            "omegas": self._true_omegas,
+            # "df_dtau_sub": self._true_df_dtau_subdominant(),
             }
 
         try:
-            models[model](ratio)
+            models[model]()
         except:
-            raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
+            raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
 
-    def _true_kerr(self, ratio:bool):
+    def _true_freq_tau(self):
+        self.theta_true = []
+        self.theta_labels = []
+        
+        for mode in self.modes_model:
+            if mode != self.modes_model[0]:
+                R = self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude
+                label_R = r"$R_{{{0}}}$".format(mode)
+            else:
+                R = (
+                        self.qnm_modes[mode].amplitude*
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                    )
+                label_R = r"$A_{{{0}}}M_f(1+z)/D_L$".format(mode)
+
+
+            self.theta_true.extend([
+                R,
+                float(self.qnm_modes[mode].phase),
+                self.qnm_modes[mode].frequency,
+                self.qnm_modes[mode].decay_time*1e3,
+                ])
+
+            self.theta_labels.extend([
+                label_R,
+                r"$\phi_{{{0}}}$".format(mode),
+                r"$f_{{{0}}} [Hz]$".format(mode),
+                r"$\tau_{{{0}}} [ms]$".format(mode),
+                ])
+
+    def _true_kerr(self):
         self.theta_true = [self.final_mass*(1+self.redshift), self.final_spin]
         self.theta_labels = [r"$M_f(1+z)$", r"$a_f$"]
         
@@ -528,167 +444,99 @@ class TrueParameters(SourceData):
                     r"$\phi_{{{0}}}$".format(mode),
                     ])
 
-    def _true_mass_spin(self, ratio:bool):
+    def _true_mass_spin(self):
         self.theta_true = []
         self.theta_labels = []
         
         for mode in self.modes_model:
-            if ratio and (mode != self.modes_model[0]):
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    self.final_mass,
-                    self.final_spin,
-                    ])
-                self.theta_labels.extend([
-                    r"$R_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$M_{{{0}}}$".format(mode),
-                    r"$a_{{{0}}}$".format(mode),
-                    ])
+            if mode != self.modes_model[0]:
+                R = self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude
+                label_R = r"$R_{{{0}}}$".format(mode)
             else:
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    self.final_mass,
-                    self.final_spin,
-                    ])
+                R = (
+                        self.qnm_modes[mode].amplitude*
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                    )
+                label_R = r"$A_{{{0}}}M_f(1+z)/D_L$".format(mode)
 
-                self.theta_labels.extend([
-                    r"$A_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$M_{{{0}}}$".format(mode),
-                    r"$a_{{{0}}}$".format(mode),
-                    ])
+            self.theta_true.extend([
+                R,
+                float(self.qnm_modes[mode].phase),
+                self.final_mass*(1+self.redshift),
+                self.final_spin,
+                ])
+            self.theta_labels.extend([
+                label_R,
+                r"$\phi_{{{0}}}$".format(mode),
+                r"$(1+z)M_{{{0}}}$".format(mode),
+                r"$a_{{{0}}}$".format(mode),
+                ])
 
-    def _true_df_dtau(self, ratio:bool):
-        self.theta_true = [self.final_mass, self.final_spin]
-        self.theta_labels = [r"$M_f$", r"$a_f$"]
+    def _true_df_dtau(self):
+        self.theta_true = [self.final_mass*(1+self.redshift), self.final_spin]
+        self.theta_labels = [r"$M_f(1+z)$", r"$a_f$"]
         
         for mode in self.modes_model:
-            if ratio and (mode != self.modes_model[0]):
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    0.,
-                    0.,
-                    ])
-                self.theta_labels.extend([
-                    r"$R_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$\delta f_{{{0}}}/f_{{{0}}}$".format(mode),
-                    r"$\delta \tau_{{{0}}}/\tau_{{{0}}}$".format(mode),
-                    ])
+            if mode != self.modes_model[0]:
+                R = self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude
+                label_R = r"$R_{{{0}}}$".format(mode)
             else:
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    0.,
-                    0.,
-                    ])
+                R = (
+                        self.qnm_modes[mode].amplitude*
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                    )
+                label_R = r"$A_{{{0}}}M_f(1+z)/D_L$".format(mode)
 
-                self.theta_labels.extend([
-                    r"$A_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$\delta f_{{{0}}}/f_{{{0}}}$".format(mode),
-                    r"$\delta \tau_{{{0}}}/\tau_{{{0}}}$".format(mode),
-                    ])
+            self.theta_true.extend([
+                R,
+                float(self.qnm_modes[mode].phase),
+                0,
+                0,
+                ])
 
-    def _true_df_dtau_subdominant(self, ratio:bool):
-        self.theta_true = [self.final_mass, self.final_spin, 0, 0]
+            self.theta_labels.extend([
+                label_R,
+                r"$\phi_{{{0}}}$".format(mode),
+                r"$\delta f_{{{0}}}/f_{{{0}}}$".format(mode),
+                r"$\delta \tau_{{{0}}}/\tau_{{{0}}}$".format(mode),
+                ])
+
+    def _true_df_dtau_subdominant(self):
+        self.theta_true = [self.final_mass*(1+self.redshift), self.final_spin, 0, 0]
         self.theta_labels = [
-            r"$M_f$", r"$a_f$",
+            r"$M_f(1+z)$", r"$a_f$",
             r"$\delta f_{{{0}}}/f_{{{0}}}$".format(self.modes_model[1]),
             r"$\delta \tau_{{{0}}}/\tau_{{{0}}}$".format(self.modes_model[1]),
             ]
         
         for mode in self.modes_model:
-            if ratio and (mode != self.modes_model[0]):
+            if mode == self.modes_model[0]:
+                self.theta_true.extend([
+                    (
+                        self.qnm_modes[mode].amplitude*
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                    ),
+                    float(self.qnm_modes[mode].phase),
+                    ])
+
+                self.theta_labels.extend([
+                    r"$A_{{{0}}}M_f(1+z)/D_L$".format(mode),
+                    r"$\phi_{{{0}}}$".format(mode),
+                    ])
+            
+            else:
                 self.theta_true.extend([
                     self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
                     float(self.qnm_modes[mode].phase),
                     ])
+
                 self.theta_labels.extend([
                     r"$R_{{{0}}}$".format(mode),
                     r"$\phi_{{{0}}}$".format(mode),
                     ])
-            else:
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    ])
-
-                self.theta_labels.extend([
-                    r"$A_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    ])
-
-    def _true_freq_tau(self, ratio:bool):
-        self.theta_true = []
-        self.theta_labels = []
-        
-        for mode in self.modes_model:
-            if ratio and (mode != self.modes_model[0]):
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    self.qnm_modes[mode].frequency,
-                    self.qnm_modes[mode].decay_time*1e3,
-                    ])
-                self.theta_labels.extend([
-                    r"$R_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$f_{{{0}}} [Hz]$".format(mode),
-                    r"$\tau_{{{0}}} [ms]$".format(mode),
-                    ])
-            else:
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    self.qnm_modes[mode].frequency,
-                    self.qnm_modes[mode].decay_time*1e3,
-                    ])
-
-                self.theta_labels.extend([
-                    r"$A_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$f_{{{0}}} [Hz]$".format(mode),
-                    r"$\tau_{{{0}}} [ms]$".format(mode),
-                    ])
-
-    def _true_omegas(self, ratio:bool):
-        self.theta_true = []
-        self.theta_labels = []
-        
-        for mode in self.modes_model:
-            if ratio and (mode != self.modes_model[0]):
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    self.qnm_modes[mode].omega_r,
-                    self.qnm_modes[mode].omega_i,
-                    ])
-                self.theta_labels.extend([
-                    r"$R_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$\omega^r_{{{0}}}$".format(mode),
-                    r"$\omega^i_{{{0}}}$".format(mode),
-                    ])
-            else:
-                self.theta_true.extend([
-                    self.qnm_modes[mode].amplitude,
-                    float(self.qnm_modes[mode].phase),
-                    self.qnm_modes[mode].omega_r,
-                    self.qnm_modes[mode].omega_i,
-                    ])
-
-                self.theta_labels.extend([
-                    r"$A_{{{0}}}$".format(mode),
-                    r"$\phi_{{{0}}}$".format(mode),
-                    r"$\omega^r_{{{0}}}$".format(mode),
-                    r"$\omega^i_{{{0}}}$".format(mode),
-                    ])
-
 
 class Priors(SourceData):
     """Generate priors for QNMs waveform models."""
@@ -704,43 +552,34 @@ class Priors(SourceData):
     def uniform_prior(
         self,
         model:str,
-        ratio,
         ):
         """Generate uniform priors parameters.
 
         Parameters
         ----------
         model : str
-            QNM model. Can be set to {"kerr", "mass_spin",
-            "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}
+            QNM model. Can be set to {"freq_tau", "kerr",
+            "mass_spin", "df_dtau", "df_dtau_sub"}
 
-        ratio : bool
-            Choose true if model has amplitude ratios
-            and False if model fits all amplitudes
         """
-        if not isinstance(ratio, bool):
-            raise ValueError("ratio should be set to True or False")
-
         models = {
             "kerr": self._prior_kerr,
             "mass_spin": self._prior_mass_spin,
             "df_dtau": self._prior_df_dtau,
-            "df_dtau_sub": self._prior_df_dtau_subdominant,
             "freq_tau": self._prior_freq_tau,
-            "omegas": self._prior_omegas,
+            # "df_dtau_sub": self._prior_df_dtau_subdominant(),
             }
 
         try:
-            models[model](ratio)
+            models[model]()
             self.prior_function = lambda theta: MCMCFunctions.noninfor_log_prior(theta, self.prior_min, self.prior_max)
 
         except:
-            raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
+            raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
 
     def cube_uniform_prior(
         self,
         model:str,
-        ratio,
         ):
         """Generate uniform priors parameters. And transform the
         unit cube 'hypercube ~ Unif[0., 1.)' to real values priors
@@ -749,32 +588,24 @@ class Priors(SourceData):
         Parameters
         ----------
         model : str
-            QNM model. Can be set to {"kerr", "mass_spin",
-            "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}
-
-        ratio : bool
-            Choose true if model has amplitude ratios
-            and False if model fits all amplitudes
+            QNM model. Can be set to {"freq_tau", "kerr",
+            "mass_spin", "df_dtau", "df_dtau_sub"}
         """
-
-        if not isinstance(ratio, bool):
-            raise ValueError("ratio should be set to True or False")
 
         models = {
             "kerr": self._prior_kerr,
             "mass_spin": self._prior_mass_spin,
             "df_dtau": self._prior_df_dtau,
-            "df_dtau_sub": self._prior_df_dtau_subdominant,
             "freq_tau": self._prior_freq_tau,
-            "omegas": self._prior_omegas,
+            # "df_dtau_sub": self._prior_df_dtau_subdominant(),
             }
 
         try:
-            models[model](ratio)
+            models[model]()
             self.prior_function = lambda hypercube: self._hypercube_transform(hypercube, self.prior_min, self.prior_max)
 
         except:
-            raise ValueError('model should be {"kerr", "mass_spin", "df_dtau", "df_dtau_sub", "freq_tau", "omegas"}')
+            raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
 
     def _hypercube_transform(
         self,
@@ -807,7 +638,90 @@ class Priors(SourceData):
         
         return cube
 
-    def _prior_kerr(self, ratio:bool):
+    def _prior_freq_tau(self):
+        self.prior_min = []
+        self.prior_max = []
+        factor = 2.5
+        M_min = self.final_mass/factor
+        M_max = self.final_mass*factor
+        z_min = self.redshift/factor
+        z_max = self.redshift*factor
+        time_scale_min = (M_min/self.mass_f)*(1 + z_min)*UnitsToSeconds.tSun
+        time_scale_max = (M_max/self.mass_f)*(1 + z_max)*UnitsToSeconds.tSun
+
+        for mode in self.modes_model:
+            self.prior_min.extend([
+                0,
+                0,
+                self.qnm_modes[mode].omega_r/2/np.pi/time_scale_min,
+                (time_scale_min/self.qnm_modes[mode].omega_i)*1e3,
+                # 5,
+                # 4.03e-05,
+            ])
+
+            if mode == self.modes_model[0]:
+                A_max = 5*M_max*(1+z_min)/(self.luminosity_distance(z_min)*1e-3)
+                # A_max = 30318
+            else:
+                A_max = 0.9
+
+            self.prior_max.extend([
+                A_max,
+                2*np.pi,
+                self.qnm_modes[mode].omega_r/2/np.pi/time_scale_max,
+                (time_scale_max/self.qnm_modes[mode].omega_i)*1e3,
+                # 5000,
+                # 18.12,
+            ])
+
+    def _prior_kerr(self):
+        self.prior_min = [1, 0]
+        self.prior_max = [5e3, 0.9999]
+
+        for mode in self.modes_model:
+            self.prior_min.extend([
+                0,
+                0,
+            ])
+            if mode == self.modes_model[0]:
+                A_max = 30318
+            else:
+                A_max = 1
+
+            self.prior_max.extend([
+                A_max,
+                2*np.pi,
+            ])
+
+    def _prior_mass_spin(self):
+        self.prior_min = []
+        self.prior_max = []
+
+        for mode in self.modes_model:
+            self.prior_min.extend([
+                0,
+                0,
+                1,
+                0,
+            ])
+
+            if mode == self.modes_model[0]:
+                A_max = 10*(
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                        )
+            else:
+                A_max = 10
+
+
+            self.prior_max.extend([
+                A_max,
+                2*np.pi,
+                self.final_mass*(1+self.redshift)*10,
+                0.9999,
+            ])
+
+    def _prior_df_dtau(self):
         self.prior_min = [1, 0]
         self.prior_max = [self.final_mass*(1+self.redshift)*10, 0.9999]
 
@@ -815,7 +729,35 @@ class Priors(SourceData):
             self.prior_min.extend([
                 0,
                 0,
+                -1,
+                -1,
             ])
+
+            if mode == self.modes_model[0]:
+                A_max = 10*(
+                        self.final_mass*(1+self.redshift)/
+                        self.dist_Gpc
+                        )
+            else:
+                A_max = 10
+
+            self.prior_max.extend([
+                A_max,
+                2*np.pi,
+                1,
+                1,
+            ])
+
+    def _prior_df_dtau_subdominant(self):
+        self.prior_min = [1, 0, -1, -1]
+        self.prior_max = [self.final_mass*10, 0.9999, 1, 1]
+
+        for mode in self.modes_model:
+            self.prior_min.extend([
+                0,
+                0,
+            ])
+
             if mode == self.modes_model[0]:
                 A_max = 10*(
                         self.final_mass*(1+self.redshift)/
@@ -829,137 +771,67 @@ class Priors(SourceData):
                 2*np.pi,
             ])
 
-    def _prior_mass_spin(self, ratio:bool):
-        self.prior_min = []
-        self.prior_max = []
 
-        for mode in self.modes_model:
-            self.prior_min.extend([
-                0,
-                0,
-                1,
-                0,
-            ])
+    def luminosity_distance(self,redshift):
+        """ 
+        Compute luminosity distance as function of the redshift
 
-            if ratio and (mode != self.modes_model[0]):
-                A_max = 1
-            else:
-                A_max = 10
+        Parameters
+        ----------
+            redshift: scalar
+                Cosmological redshift value
 
-            self.prior_max.extend([
-                A_max,
-                2*np.pi,
-                self.final_mass*10,
-                0.9999,
-            ])
+        Returns
+        -------
+            scalar: Returns luminosity distance relative to given redshift
+        """
+        from scipy import integrate
+        
+        # cosmological constants
+        # values from https://arxiv.org/pdf/1807.06209.pdf
+        h = 0.6796
+        H_0 = h*100*1e+3 # Huble constant m s**-1 Mpc**-1
+        clight = 2.99792458e8 # speed of lightm s**-1
+        Dist_H = clight/H_0 # Huble distance
 
-    def _prior_df_dtau(self, ratio:bool):
-        self.prior_min = [1, 0]
-        self.prior_max = [self.final_mass*10, 0.9999]
+        Omega_M = 0.315
+        Omega_Λ = 1-Omega_M
+        Omega_K = 0.0
 
-        for mode in self.modes_model:
-            self.prior_min.extend([
-                0,
-                0,
-                -1,
-                -1,
-            ])
+        Ez = lambda z: 1/np.sqrt(Omega_M*(1+z)**3 + Omega_K*(1+z)**2 + Omega_Λ)
+        Dist_C = Dist_H*integrate.quad(Ez, 0, redshift)[0]
+        Dist_L = (1 + redshift)*Dist_C
 
-            if ratio and (mode != self.modes_model[0]):
-                A_max = 1
-            else:
-                A_max = 10
-
-            self.prior_max.extend([
-                A_max,
-                2*np.pi,
-                1,
-                1,
-            ])
-
-    def _prior_df_dtau_subdominant(self, ratio:bool):
-        self.prior_min = [1, 0, -1, -1]
-        self.prior_max = [self.final_mass*10, 0.9999, 1, 1]
-
-        for mode in self.modes_model:
-            self.prior_min.extend([
-                0,
-                0,
-            ])
-
-            if ratio and (mode != self.modes_model[0]):
-                A_max = 1
-            else:
-                A_max = 10
-
-            self.prior_max.extend([
-                A_max,
-                2*np.pi,
-            ])
-
-    def _prior_freq_tau(self, ratio:bool):
-        self.prior_min = []
-        self.prior_max = []
-
-        for mode in self.modes_model:
-            self.prior_min.extend([
-                0,
-                0,
-                self.qnm_modes[mode].frequency/10,
-                self.qnm_modes[mode].decay_time*1e3/10,
-            ])
-
-            if ratio and (mode != self.modes_model[0]):
-                A_max = 1
-            else:
-                A_max = 10
-
-            self.prior_max.extend([
-                A_max,
-                2*np.pi,
-                self.qnm_modes[mode].frequency*10,
-                self.qnm_modes[mode].decay_time*1e3*10,
-            ])
-
-    def _prior_omegas(self, ratio:bool):
-        self.prior_min = []
-        self.prior_max = []
-
-        for mode in self.modes_model:
-            self.prior_min.extend([
-                0,
-                0,
-                self.qnm_modes[mode].omega_r/10,
-                self.qnm_modes[mode].omega_i/10,
-            ])
-            if ratio and (mode != self.modes_model[0]):
-                A_max = 1
-            else:
-                A_max = 10
-
-            self.prior_max.extend([
-                A_max,
-                2*np.pi,
-                self.qnm_modes[mode].omega_r*10,
-                self.qnm_modes[mode].omega_i*10,
-            ])
-
+        return Dist_L
 if __name__ == '__main__':
     np.random.seed(1234)
-    m_f = 500
-    z = 0.1
+    m_f = 63
+    z = 0.093
     q = 1.5
 
     detector = "LIGO"
-    modes = ["(2,2,0)", "(2,2,1) I"]
     modes = ["(2,2,0)"]
+    # modes = ["(2,2,0)", "(2,2,1) I"]
+    # modes = ["(2,2,1) I"]
     teste = Models(modes, detector, m_f, z, q, "FH")
-    print(teste._parameters_kerr_mass_spin([m_f, teste.final_spin, 1, 2, 3, 4]))
-
-    wave = teste._model_function([m_f, teste.final_spin,0.4*(m_f*(1+z))/teste.dist_Gpc, 2], teste._parameters_kerr_mass_spin)
-    print(wave)
+    # print(teste.qnm_modes[modes[0]].amplitude*m_f*(1+z)/teste.dist_Gpc)
+    # print(teste.qnm_modes[modes[0]].frequency)
+    # print(teste.qnm_modes[modes[0]].omega_i)
+    # print(teste.qnm_modes[modes[0]].decay_time)
+    # print(teste._parameters_kerr_mass_spin([m_f, teste.final_spin, 1, 2, 3, 4]))
+    # prior = Priors(modes, detector, m_f, z, q, "FH")
+    # prior._prior_freq_tau()
+    # print(prior.prior_min)
+    # print(prior.prior_max)
+    true = TrueParameters(modes, detector, m_f, z, q, "FH")
+    true._true_freq_tau()
+    wave_freq_tau = teste._model_function(true.theta_true, teste._parameters_freq_tau)
+    true._true_kerr()
+    wave = teste._model_function(true.theta_true, teste._parameters_kerr_mass_spin)
+    # # print(wave)
     import matplotlib.pyplot as plt
-    plt.loglog(teste.detector["freq"],teste.detector["psd"],)
-    plt.loglog(teste.detector["freq"], np.abs(wave))
+    plt.loglog(teste.detector["freq"],np.sqrt(teste.detector["freq"])*teste.detector["psd"],)
+    plt.loglog(teste.detector["freq"], 2*teste.detector["freq"]*np.abs(wave))
+    plt.loglog(teste.detector["freq"], 2*teste.detector["freq"]*np.abs(wave_freq_tau), '--')
     plt.show()
     # teste.plot()
