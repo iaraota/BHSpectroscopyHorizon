@@ -150,7 +150,7 @@ class EmceeSampler(SourceData):
 
 
 if __name__ == '__main__':
-    # np.random.seed(123)
+    np.random.seed(123)
     """GW190521
     final mass = 150.3
     redshift = 0.72
@@ -164,12 +164,12 @@ if __name__ == '__main__':
     # z = 0.5
     z = 0.72
     z = 0.15
-    z = 0.1
+    # z = 0.1
     # z = 0.05
     # z = 0.01
     # m_f = 5e2
     # m_f = 63
-    z = 0.1
+    # z = 0.01
     detector = "LIGO"
     # detector = "CE"
     modes = ["(2,2,0)"]
@@ -183,8 +183,8 @@ if __name__ == '__main__':
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
 
-    m_f, z = 8.774918735010294, 0.03239742629528197
-    m_f, z = 649.1219576310824, 0.4442706749606883	
+    # m_f, z = 8.774918735010294, 0.03239742629528197
+    # m_f, z = 649.1219576310824, 0.4442706749606883	
     teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
     teste.run_sampler('freq_tau')
     # df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)

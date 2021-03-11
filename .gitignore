@@ -11,3 +11,4 @@ chains/
 figs/
 .ipynb_checkpoints/
 data/
+venv/

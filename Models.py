@@ -322,8 +322,8 @@ class Models(SourceData):
         array
             Returns QNM in frequency domain and SI units.
         """
-        # angular_mean = np.sqrt(1/5/4/np.pi)
-        angular_mean = 1
+        angular_mean = np.sqrt(1/5/4/np.pi)
+        # angular_mean = 1
 
         h_real=  GWFunctions.compute_qnm_fourier(
             self.detector["freq"],
@@ -344,7 +344,7 @@ class Models(SourceData):
             convention = self.ft_convention
             )
         
-        return angular_mean*(h_real)#+ h_imag)
+        return angular_mean*(h_real+ h_imag)
 
 class TrueParameters(SourceData):
     """Generate true parameters of injected QNMs."""
@@ -600,18 +600,24 @@ class Priors(SourceData):
             # "df_dtau_sub": self._prior_df_dtau_subdominant(),
             }
 
-        try:
-            models[model]()
-            self.prior_function = lambda hypercube: self._hypercube_transform(hypercube, self.prior_min, self.prior_max)
+        # try:
+        models[model]()
+        self.prior_function = lambda hypercube: self._hypercube_transform(
+            hypercube,
+            self.prior_min,
+            self.prior_max,
+            self.prior_scale,
+            )
 
-        except:
-            raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
+        # except:
+        #     raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
 
     def _hypercube_transform(
         self,
         hypercube,
         prior_min:list,
         prior_max:list,
+        transforms=None,
         ):
         """Transfor prior to cube unit cube 'hypercube ~ Unif[0., 1.)' 
         to the parameter of interest for MultiNest sampling .
@@ -624,46 +630,69 @@ class Priors(SourceData):
             Minimum values in the prior.
         prior_max : list
             Maximum values in the prior.
+        transforms: list
+            List that choose the prior to be 'linear' or 'log'. 
+            Must have the same length as prior_min and prior_max.
+            If set to 'None' or 'linear', all parameters will be linear.
+            If set to 'log' all parameters will be in log scale.
 
         Returns
         -------
         array_like
             Returns transformed cube from Unif[0,1] to [min, max].
         """
-        transform = lambda a, b, x: a + (b - a) * x
+
+
+        if transforms == None or transforms == 'linear':
+            transforms = ['linear']*len(prior_min)
+        elif transforms == 'log':
+            transforms = ['linear']*len(prior_min)
+
+        transform = {
+            'linear': lambda a, b, x: a + (b - a) * x,
+            'log': lambda a, b, x: a*(b/a)**x,
+            }
 
         cube = np.array(hypercube)
-        for i in range(len(self.prior_min)):
-            cube[i] = transform(self.prior_min[i], self.prior_max[i], cube[i])
+        for i in range(len(prior_min)):
+            cube[i] = transform[transforms[i]](prior_min[i], prior_max[i], cube[i])
         
         return cube
 
     def _prior_freq_tau(self):
+        self.prior_scale = []
         self.prior_min = []
         self.prior_max = []
-        factor = 2.5
-        M_min = self.final_mass/factor
-        M_max = self.final_mass*factor
-        z_min = self.redshift/factor
-        z_max = self.redshift*factor
+        percent = 0.5
+        M_min = self.final_mass*(1-percent)
+        M_max = self.final_mass*(1+percent)
+        z_min = self.redshift/(1-percent)
+        z_max = self.redshift*(1+percent)
         time_scale_min = (M_min/self.mass_f)*(1 + z_min)*UnitsToSeconds.tSun
         time_scale_max = (M_max/self.mass_f)*(1 + z_max)*UnitsToSeconds.tSun
 
         for mode in self.modes_model:
+
+
+            if mode == self.modes_model[0]:
+                A_max = 10*M_max*(1+z_min)/(self.luminosity_distance(z_min)*1e-3)
+                A_min = 0.1*M_min*(1+z_max)/(self.luminosity_distance(z_max)*1e-3)
+                # A_max = 30318
+                # self.prior_scale.extend(['log', 'linear', 'log', 'log'])
+                self.prior_scale.extend(['linear', 'linear', 'linear', 'linear'])
+            else:
+                A_min = 0
+                A_max = 0.9
+                self.prior_scale.extend(['linear', 'linear', 'linear', 'linear'])
+
             self.prior_min.extend([
-                0,
+                A_min,
                 0,
                 self.qnm_modes[mode].omega_r/2/np.pi/time_scale_min,
                 (time_scale_min/self.qnm_modes[mode].omega_i)*1e3,
                 # 5,
-                # 4.03e-05,
+                # 4.03e-05*1e3,
             ])
-
-            if mode == self.modes_model[0]:
-                A_max = 5*M_max*(1+z_min)/(self.luminosity_distance(z_min)*1e-3)
-                # A_max = 30318
-            else:
-                A_max = 0.9
 
             self.prior_max.extend([
                 A_max,
@@ -671,23 +700,37 @@ class Priors(SourceData):
                 self.qnm_modes[mode].omega_r/2/np.pi/time_scale_max,
                 (time_scale_max/self.qnm_modes[mode].omega_i)*1e3,
                 # 5000,
-                # 18.12,
+                # 18.12*1e3,
             ])
 
     def _prior_kerr(self):
+        self.prior_scale = ['linear', 'linear']
         self.prior_min = [1, 0]
         self.prior_max = [5e3, 0.9999]
+        percent = 0.5
+        M_min = self.final_mass*(1-percent)
+        M_max = self.final_mass*(1+percent)
+        z_min = self.redshift/(1-percent)
+        z_max = self.redshift*(1+percent)
+        time_scale_min = (M_min/self.mass_f)*(1 + z_min)*UnitsToSeconds.tSun
+        time_scale_max = (M_max/self.mass_f)*(1 + z_max)*UnitsToSeconds.tSun
 
         for mode in self.modes_model:
+
+            if mode == self.modes_model[0]:
+                A_max = M_max*(1+z_min)/(self.luminosity_distance(z_min)*1e-3)
+                A_min = M_min*(1+z_max)/(self.luminosity_distance(z_max)*1e-3)
+                # A_max = 30318
+                self.prior_scale.extend(['linear', 'linear'])
+            else:
+                A_max = 0.9
+                A_min = 0
+                self.prior_scale.extend(['linear', 'linear'])
+
             self.prior_min.extend([
-                0,
+                A_min,
                 0,
             ])
-            if mode == self.modes_model[0]:
-                A_max = 30318
-            else:
-                A_max = 1
-
             self.prior_max.extend([
                 A_max,
                 2*np.pi,
@@ -809,6 +852,9 @@ if __name__ == '__main__':
     z = 0.093
     q = 1.5
 
+    np.random.seed(6157)
+    m_f, z =82.76505824347244, 0.02255644501268386 
+
     detector = "LIGO"
     modes = ["(2,2,0)"]
     # modes = ["(2,2,0)", "(2,2,1) I"]
@@ -826,12 +872,19 @@ if __name__ == '__main__':
     true = TrueParameters(modes, detector, m_f, z, q, "FH")
     true._true_freq_tau()
     wave_freq_tau = teste._model_function(true.theta_true, teste._parameters_freq_tau)
-    true._true_kerr()
-    wave = teste._model_function(true.theta_true, teste._parameters_kerr_mass_spin)
+    pars = [2000, 2.3, 4770, 2.6, 0.16, 0.39, 197.5, 5.4]
+
+    modes = ["(2,2,0)", "(2,2,1) I"]
+    # modes = ["(2,2,1) I"]
+    teste = Models(modes, detector, m_f, z, q, "FH")
+    wave_fitted = teste._model_function(pars, teste._parameters_freq_tau)
     # # print(wave)
+
+    N_data = len(teste.detector["psd"]) 
+    noise = teste.detector["psd"]*np.exp(1j*np.random.rand(N_data)*2*np.pi)
     import matplotlib.pyplot as plt
-    plt.loglog(teste.detector["freq"],np.sqrt(teste.detector["freq"])*teste.detector["psd"],)
-    plt.loglog(teste.detector["freq"], 2*teste.detector["freq"]*np.abs(wave))
-    plt.loglog(teste.detector["freq"], 2*teste.detector["freq"]*np.abs(wave_freq_tau), '--')
+    plt.loglog(teste.detector["freq"], np.abs(noise + wave_freq_tau),'gray', alpha = .8)
+    plt.loglog(teste.detector["freq"], np.abs(wave_freq_tau))
+    plt.loglog(teste.detector["freq"], np.abs(wave_fitted), '--')
     plt.show()
     # teste.plot()
