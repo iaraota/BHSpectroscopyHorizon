@@ -91,7 +91,7 @@ class SourceData:
         """
         N_data = len(self.detector["psd"]) 
         # generate random noise from PSD
-        self.noise = self.detector["psd"]*np.exp(1j*np.random.rand(N_data)*2*np.pi)
+        self.noise = self.detector["psd"]*np.exp(1j*np.random.uniform(0,np.pi*2,N_data))*(1+np.random.uniform(np.nextafter(-1,0),1,N_data))
         # make noise an immutable array
         self.noise.flags.writeable = False
 

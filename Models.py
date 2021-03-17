@@ -666,29 +666,32 @@ class Priors(SourceData):
         percent = 0.5
         M_min = self.final_mass*(1-percent)
         M_max = self.final_mass*(1+percent)
-        z_min = self.redshift/(1-percent)
-        z_max = self.redshift*(1+percent)
-        time_scale_min = (M_min/self.mass_f)*(1 + z_min)*UnitsToSeconds.tSun
-        time_scale_max = (M_max/self.mass_f)*(1 + z_max)*UnitsToSeconds.tSun
 
+        z_min = self.redshift*(1-percent)
+        z_max = self.redshift*(1+percent)
+
+        time_scale_min = (1 + z_min)*(M_min/self.mass_f)*UnitsToSeconds.tSun
+        time_scale_max = (1 + z_max)*(M_max/self.mass_f)*UnitsToSeconds.tSun
         for mode in self.modes_model:
 
 
             if mode == self.modes_model[0]:
-                A_max = 10*M_max*(1+z_min)/(self.luminosity_distance(z_min)*1e-3)
-                A_min = 0.1*M_min*(1+z_max)/(self.luminosity_distance(z_max)*1e-3)
+                A_max = M_max*(1 + z_min)/(self.luminosity_distance(z_min)*1e-3)
+                A_min = 0#M_min*(1 + z_max)/(self.luminosity_distance(z_max)*1e-3)
+                # A_max = 10*self.final_mass*(1 + self.redshift)/(self.luminosity_distance(self.redshift)*1e-3)
+                # A_min = 0.01*self.final_mass*(1 + self.redshift)/(self.luminosity_distance(self.redshift)*1e-3)
                 # A_max = 30318
                 # self.prior_scale.extend(['log', 'linear', 'log', 'log'])
-                self.prior_scale.extend(['linear', 'linear', 'linear', 'linear'])
+                self.prior_scale.extend(['linear', 'linear', 'log', 'linear'])
             else:
                 A_min = 0
                 A_max = 0.9
-                self.prior_scale.extend(['linear', 'linear', 'linear', 'linear'])
+                self.prior_scale.extend(['linear', 'linear', 'log', 'linear'])
 
             self.prior_min.extend([
                 A_min,
                 0,
-                self.qnm_modes[mode].omega_r/2/np.pi/time_scale_min,
+                self.qnm_modes[mode].omega_r/2/np.pi/time_scale_max,
                 (time_scale_min/self.qnm_modes[mode].omega_i)*1e3,
                 # 5,
                 # 4.03e-05*1e3,
@@ -697,7 +700,7 @@ class Priors(SourceData):
             self.prior_max.extend([
                 A_max,
                 2*np.pi,
-                self.qnm_modes[mode].omega_r/2/np.pi/time_scale_max,
+                self.qnm_modes[mode].omega_r/2/np.pi/time_scale_min,
                 (time_scale_max/self.qnm_modes[mode].omega_i)*1e3,
                 # 5000,
                 # 18.12*1e3,
@@ -848,12 +851,12 @@ class Priors(SourceData):
         return Dist_L
 if __name__ == '__main__':
     np.random.seed(1234)
-    m_f = 63
-    z = 0.093
+    # m_f = 63
+    # z = 0.093
     q = 1.5
-
-    np.random.seed(6157)
-    m_f, z =82.76505824347244, 0.02255644501268386 
+    
+    np.random.seed(4652)
+    m_f, z = 17.257445345175107, 9.883089941558583e-05
 
     detector = "LIGO"
     modes = ["(2,2,0)"]
@@ -865,26 +868,37 @@ if __name__ == '__main__':
     # print(teste.qnm_modes[modes[0]].omega_i)
     # print(teste.qnm_modes[modes[0]].decay_time)
     # print(teste._parameters_kerr_mass_spin([m_f, teste.final_spin, 1, 2, 3, 4]))
-    # prior = Priors(modes, detector, m_f, z, q, "FH")
-    # prior._prior_freq_tau()
-    # print(prior.prior_min)
-    # print(prior.prior_max)
+    prior = Priors(modes, detector, m_f, z, q, "FH")
+    prior._prior_freq_tau()
     true = TrueParameters(modes, detector, m_f, z, q, "FH")
     true._true_freq_tau()
     wave_freq_tau = teste._model_function(true.theta_true, teste._parameters_freq_tau)
-    pars = [2000, 2.3, 4770, 2.6, 0.16, 0.39, 197.5, 5.4]
+    pars = [15830, 0.42, 968.5, 1.035, 0.09, 3.6, 3400, 0.5]
 
-    modes = ["(2,2,0)", "(2,2,1) I"]
+    modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,1) I"]
     teste = Models(modes, detector, m_f, z, q, "FH")
     wave_fitted = teste._model_function(pars, teste._parameters_freq_tau)
     # # print(wave)
-
+    # for z in np.linspace(1e-2, 1, 10):
+    #     print("")
+    #     print(z)
+    #     print((1+z)/prior.luminosity_distance(z))
+    #     print((1+z*0.5)/prior.luminosity_distance(z*0.5))
+    #     print((1+z*1.5)/prior.luminosity_distance(z*1.5))
+        
     N_data = len(teste.detector["psd"]) 
     noise = teste.detector["psd"]*np.exp(1j*np.random.rand(N_data)*2*np.pi)
+    data = noise + wave_freq_tau
     import matplotlib.pyplot as plt
-    plt.loglog(teste.detector["freq"], np.abs(noise + wave_freq_tau),'gray', alpha = .8)
-    plt.loglog(teste.detector["freq"], np.abs(wave_freq_tau))
-    plt.loglog(teste.detector["freq"], np.abs(wave_fitted), '--')
-    plt.show()
-    # teste.plot()
+    lik1 =GWFunctions.inner_product(teste.detector["freq"], wave_freq_tau, noise+wave_freq_tau, teste.detector["psd"])-GWFunctions.inner_product(teste.detector["freq"], wave_freq_tau, wave_freq_tau, teste.detector["psd"])/2
+    lik2 =GWFunctions.inner_product(teste.detector["freq"], wave_fitted, noise+wave_freq_tau, teste.detector["psd"])-GWFunctions.inner_product(teste.detector["freq"], wave_fitted, wave_fitted, teste.detector["psd"])/2  
+    print(lik1)
+    print(lik2)
+    print(lik1-lik2)
+    plt.plot(teste.detector["freq"], np.real(noise + wave_freq_tau),'gray', alpha = .8)
+    plt.plot(teste.detector["freq"], np.real(wave_freq_tau))
+    plt.plot(teste.detector["freq"], np.real(wave_fitted), '--')
+    plt.xscale('log')
+    # plt.show()
+    # # teste.plot()
