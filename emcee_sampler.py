@@ -157,20 +157,20 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    m_f = 500
+    m_f = 1e4
     z = 0.1
     q = 1.5
 
-    m_f = 150.3
+    # m_f = 150.3
     # z = 0.5
-    z = 0.72
+    # z = 0.72
     # z = 0.15
     # z = 0.1
     # z = 0.05
     # z = 0.01
     # m_f = 5e2
     # m_f = 63
-    z = 0.01
+    # z = 0.01
     detector = "LIGO"
     # detector = "CE"
     modes = ["(2,2,0)"]
@@ -181,11 +181,11 @@ if __name__ == '__main__':
     modes_model = ["(2,2,0)"]
     # modes_model = ["(2,2,0)", "(2,2,1) II"]
     # modes_model = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    modes_model = ["(2,2,0)", "(4,4,0)"]
+    # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
 
-    np.random.seed(4652)
-    m_f, z = 17.257445345175107, 9.883089941558583e-05
+    # np.random.seed(4652)
+    # m_f, z = 17.257445345175107, 9.883089941558583e-05
     teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
     teste.run_sampler('freq_tau')
     # df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)

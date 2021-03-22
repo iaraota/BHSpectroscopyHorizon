@@ -38,12 +38,14 @@ class SourceData:
         self.q_mass = q_mass
         self.ft_convention = convention
 
-        # import detector strain
-        self.detector = ImportData.import_detector(detector, False)
-
+        
         # get QNM parameters from simulation
         self.qnm_pars, self.mass_f, self.final_spin = self.import_simulation_qnm_parameters(self.q_mass)
         
+        # import detector strain
+        #self.detector = ImportData.import_detector(detector, False)
+        self._import_detector_psd(detector)
+
         # Compute inifical mass
         self.initial_mass = self.final_mass/self.mass_f
 
@@ -85,13 +87,74 @@ class SourceData:
                 }
             # qnm_modes[k].qnm_t = strain_unit*qnm_modes[k].qnm_time(times/time_unit, part, "NR")
         self.qnm_modes = qnm_modes
+    def _import_detector_psd(
+        self,
+        detector:str,
+        ):
+        """Import interpolated detector and create array with lower df.
+
+        Parameters
+        ----------
+        detector : str
+            Detector's name
+        """
+        #TODO: freqs are not compatible with LISA
+        # import detector data and interpolation function
+        detector_data, itp_detector = ImportData.import_detector(detector, True)
+
+        # get minimun and maximum frequencies and smallest df
+        f_min, f_max = min(detector_data["freq"]), max(detector_data["freq"])
+        df = detector_data["freq"][1] - detector_data["freq"][0]
+        df = 0.1
+        
+        # taus = []
+        # for (k,v) in self.qnm_pars.items():
+        #     qnm = GWFunctions.QuasinormalMode(v["amplitudes"], v["phases"], v['omegas']['omega_r'], 
+        #                     v['omegas']['omega_i'], self.final_mass, self.redshift, self.mass_f)
+        #     taus.append(qnm.decay_time)
+        # tau_max = max(taus)
+        # print(tau_max)
+        # T = 1000*tau_max
+        # df = 1/T
+
+        # create frequency array
+        # freqs_1 = np.arange(f_min, 100, df)
+        # freqs_2 = np.arange(100+1*df, 1000, 10*df)
+        # freqs_3 = np.arange(1000+10*df, f_max, 100*df)
+        # freqs = np.concatenate((freqs_1, freqs_2, freqs_3))
+        freqs = np.arange(f_min, f_max, df)
+        
+        detector_psd = itp_detector(freqs)
+        self.detector = {
+            "freq": freqs,
+            "psd": detector_psd,
+            "label": detector_data["label"],
+        }
 
     def _random_noise(self):
         """Generate noise in frequency domain.
         """
         N_data = len(self.detector["psd"]) 
+        df = self.detector["freq"][1] - self.detector["freq"][0]
+        # dfs =  np.diff(self.detector["freq"])
+        # dfs = np.append(dfs, dfs[-1])
+        
+        sigma = 0.5 * (self.detector["psd"]**2 /df) ** (0.5)
+
+        not_zero = (sigma != 0)
+
+        sigma_red = sigma[not_zero]
+        noise_re = np.random.normal(0, sigma_red)
+        noise_co = np.random.normal(0, sigma_red)
+        noise_red = noise_re + 1j * noise_co
+
+        noise = np.zeros(len(sigma), dtype='complex128')
+        noise[not_zero] = noise_red        
+
+        self.noise = noise
+
         # generate random noise from PSD
-        self.noise = self.detector["psd"]*np.exp(1j*np.random.uniform(0,np.pi*2,N_data))*(1+np.random.uniform(np.nextafter(-1,0),1,N_data))
+        # self.noise = self.detector["psd"]*np.exp(1j*np.random.uniform(0,np.pi*2,N_data))*(1+np.random.uniform(np.nextafter(-1,0),1,N_data))
         # make noise an immutable array
         self.noise.flags.writeable = False
 

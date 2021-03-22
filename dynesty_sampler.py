@@ -157,7 +157,7 @@ def one_mode_bayes_histogram(modes_data, modes_model, detector, num, q, num_proc
     for mode in modes_model:
         label_model += ' '+mode
 
-    masses = np.random.choice(np.power(10,np.linspace(1, 2, num*10)),num, replace=False)
+    masses = np.random.choice(np.power(10,np.linspace(1, np.log10(5*10**3), num*10)),num, replace=False)
     redshifts = np.random.choice(np.power(10,np.linspace(-2, 0, num*10)), num, replace=False)
     seeds = np.random.randint(1,1e4, num)
 
@@ -296,64 +296,44 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    # m_f = 500
+    # m_f = 1e3
     # z = 0.1
-    # m_f, z = 56.47091406864074, 0.115773169998689
-    # teste = DynestySampler(modes, modes_model, detector, m_f, z, q, "FH")
-    # teste.run_sampler('freq_tau')
-    # z = 0.05
-    # z = 0.01
-    detector = "LIGO"
-    q = 1.5
+    # # z = 0.05
+    # # z = 0.01
+    # detector = "LIGO"
+    # q = 1.5
 
-    modes = ["(2,2,0)"]
-    # modes = ["(2,2,0)", "(2,2,1) I"]
+    # modes = ["(2,2,0)"]
+    # # modes = ["(2,2,0)", "(2,2,1) I"]
 
-    # modes = ["(2,2,0)", "(4,4,0)"]
-    # modes = ["(2,2,0)", "(3,3,0)"]
-    modes_model = ["(2,2,0)"]
+    # # modes = ["(2,2,0)", "(4,4,0)"]
+    # # modes = ["(2,2,0)", "(3,3,0)"]
+    # modes_model = ["(2,2,0)"]
     # modes_model = ["(2,2,0)", "(2,2,1) I"]
-    modes_model = ["(2,2,0)", "(4,4,0)"]
-    # modes_model = ["(2,2,0)", "(3,3,0)"]
-    # m_f, z = 1435.1783817201451, 0.7583677914997191
-    # m_f, z = 649.1219576310824, 0.4442706749606883	
-    # m_f = 63
-    # # z = 0.093
-    # np.random.seed(3892)
-    # m_f, z =56.603517571162335, 0.012034168364629746 
-    # np.random.seed(6157)
-    # m_f, z =82.76505824347244, 0.02255644501268386 
-    # m_f = 10
-    # z = 1e-2
-    # np.random.seed(370)
-    # m_f, z = 14.867380172937594,0.0021620561735058847
-    
-    # 9572    16.119606774259253      0.01693576828198344     6.448546091496067       31.910585345871326      25.46203925437526
+    # # modes_model = ["(2,2,0)", "(4,4,0)"]
+    # # modes_model = ["(2,2,0)", "(3,3,0)"]
 
 
+    # # np.random.seed(9572)
+    # teste = DynestySampler(modes, modes_model, detector, m_f, z, q, "FH")
+    # model = "freq_tau"
 
-    np.random.seed(9572)
-    m_f, z = 16.119606774259253, 0.01693576828198344
-    teste = DynestySampler(modes, modes_model, detector, m_f, z, q, "FH")
-    model = "freq_tau"
-    teste.true_pars.choose_theta_true(model)
-    teste.priors.cube_uniform_prior(model)
-    teste.models.choose_model(model)
-    teste.models_data.choose_model(model)
-    print(teste.loglikelihood(teste.models.model, [600, 5.6, 200, 0.5, 0.9, 6, 2700,1.4]))
-    print(teste.loglikelihood(teste.models_data.model, [240, 5, 1400, 1.4]))
-    print(teste.loglikelihood(teste.models_data.model, teste.true_pars.theta_true))
-    plt.loglog(teste.detector['freq'], np.abs(teste.data))
-    # plt.loglog(teste.detector['freq'], np.abs(teste.noise))
-    plt.loglog(teste.detector['freq'], np.abs(teste.models_data.model(teste.true_pars.theta_true)), label = 'real')
-    plt.loglog(teste.detector['freq'], np.abs(teste.models_data.model([240, 5, 1400, 1.4])), label = '1 mode')
-    plt.loglog(teste.detector['freq'], np.abs(teste.models.model([600, 5.6, 200, 0.5, 0.9, 6, 2700,1.4])), label='2 modes')
-    plt.legend()
-    plt.show()
+    # teste.true_pars.choose_theta_true(model)
+    # teste.priors.cube_uniform_prior(model)
+    # teste.models.choose_model(model)
+    # teste.models_data.choose_model(model)
+    # print(teste.loglikelihood(teste.models.model, [600, 5.6, 200, 0.5, 0.9, 6, 2700,1.4]))
+    # print(teste.loglikelihood(teste.models_data.model, [240, 5, 1400, 1.4]))
+    # print(teste.loglikelihood(teste.models_data.model, teste.true_pars.theta_true))
+    # plt.loglog(teste.detector['freq'], np.abs(teste.data))
+    # plt.loglog(teste.detector['freq'], teste.detector['psd'])
+    # plt.loglog(teste.detector['freq'], np.abs(teste.models_data.model(teste.true_pars.theta_true)), label = 'real')
+    # # plt.legend()
+    # plt.show()
 
-    print(teste.compute_bayes_factor('freq_tau'))
-    teste.run_sampler('freq_tau')
-    # teste.plot()
+    # print(teste.compute_bayes_factor('freq_tau'))
+    # teste.run_sampler('freq_tau')
+    # # teste.plot()
 
     q = 1.5
     detector = "LIGO"
@@ -361,16 +341,16 @@ if __name__ == '__main__':
     modes = ["(2,2,0)"]
 
     modes_model = ["(2,2,0)", "(4,4,0)"]
-    # one_mode_bayes_histogram(modes, modes_model, detector, 98, q, num_procs)
+    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
     
-    # modes_model = ["(2,2,0)", "(2,2,1) I"]
-    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+    modes_model = ["(2,2,0)", "(2,2,1) I"]
+    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
 
-    # modes_model = ["(2,2,0)", "(3,3,0)"]
-    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+    modes_model = ["(2,2,0)", "(3,3,0)"]
+    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
 
-    # modes_model = ["(2,2,0)", "(2,1,0)"]
-    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+    modes_model = ["(2,2,0)", "(2,1,0)"]
+    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
 
 
 
