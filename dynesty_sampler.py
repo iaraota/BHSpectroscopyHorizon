@@ -2,6 +2,9 @@ import os
 import json
 from datetime import datetime
 
+import multiprocessing
+import concurrent.futures
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -130,7 +133,6 @@ class DynestySampler(SourceData):
             model, self.data, self.detector["freq"], self.detector["psd"]
             )
 
-import multiprocessing
 
 def compute_log_B(B_fac,i,modes_data, modes_model, detector, mass, redshift, q, num, seed):#, redshift):
     np.random.seed(seed)
@@ -195,9 +197,6 @@ def one_mode_bayes_histogram(modes_data, modes_model, detector, num, q, num_proc
     # plt.hist(hist)
     # plt.show()
 
-def secant_method(f1, f2, x1, x2):
-    x3  = (x1*f2 - x2*f1)/(f2 - f1)
-    return x3
 
 def find_logB(redshift, modes_data, modes_model, detector, mass, q):
     dy_sampler = DynestySampler(modes_data, modes_model, detector, mass, redshift, q, "FH")
@@ -251,8 +250,10 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
                 z_max = z0
     
     with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "w") as myfile:
-        myfile.write(f"{seed}\t{mass}\t{x2}\t{B_fac}\n")
+        myfile.write(f"{seed}\t{mass}\t{z0}\t{B_fac}\n")
 
+    return (mass, z0, B_fac)
+from multiprocessing import Pool, cpu_count
 def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs=8):
     manager = multiprocessing.Manager()
     B_factor = manager.dict()
@@ -267,31 +268,38 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs=8):
 
     with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "w") as myfile:
         myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB\n")
+    mode1 = modes_data[0]
+    mode2 = modes_data[1][:7]
+    masses, redshifts = np.genfromtxt(f'data/horizon/rayleigh/rayleigh_horizon_{q}_{detector}_{mode1}+{mode2}_detector.dat').T
 
-    masses, redshifts = np.genfromtxt('data/horizon/rayleigh/rayleigh_horizon_1.5_LIGO_(2,2,0)+(2,2,1)_detector.dat').T
-    masses = [masses[50]]
-    redshifts = [redshifts[50]]
     seeds = np.random.randint(1,1e4, len(masses))
 
-    processes = []
-    j = 0
-    while j+(num_procs-1) < len(masses):
-        for i in range(j,j+num_procs):
-            p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
-            p.start()
-            processes.append(p)
+    values = tuple((seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses)))
+    print(masses[0])
+
+    with Pool() as pool:
+        res = pool.starmap(spectrocopy_horizon, values)
+
+
+    # processes = []
+    # j = 0
+    # while j+(num_procs-1) < len(masses):
+    #     for i in range(j,j+num_procs):
+    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
+    #         p.start()
+    #         processes.append(p)
             
-        for process in processes:
-            process.join()
-        j += num_procs
-    if j < len(masses):
-        for i in range(j,len(masses)):
-            p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
-            p.start()
-            processes.append(p)
+    #     for process in processes:
+    #         process.join()
+    #     j += num_procs
+    # if j < len(masses):
+    #     for i in range(j,len(masses)):
+    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
+    #         p.start()
+    #         processes.append(p)
             
-        for process in processes:
-            process.join()
+    #     for process in processes:
+    #         process.join()
 
 if __name__ == '__main__':
     # np.random.seed(1234)

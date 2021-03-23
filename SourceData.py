@@ -107,21 +107,6 @@ class SourceData:
         df = detector_data["freq"][1] - detector_data["freq"][0]
         df = 0.1
         
-        # taus = []
-        # for (k,v) in self.qnm_pars.items():
-        #     qnm = GWFunctions.QuasinormalMode(v["amplitudes"], v["phases"], v['omegas']['omega_r'], 
-        #                     v['omegas']['omega_i'], self.final_mass, self.redshift, self.mass_f)
-        #     taus.append(qnm.decay_time)
-        # tau_max = max(taus)
-        # print(tau_max)
-        # T = 1000*tau_max
-        # df = 1/T
-
-        # create frequency array
-        # freqs_1 = np.arange(f_min, 100, df)
-        # freqs_2 = np.arange(100+1*df, 1000, 10*df)
-        # freqs_3 = np.arange(1000+10*df, f_max, 100*df)
-        # freqs = np.concatenate((freqs_1, freqs_2, freqs_3))
         freqs = np.arange(f_min, f_max, df)
         
         detector_psd = itp_detector(freqs)
@@ -136,8 +121,6 @@ class SourceData:
         """
         N_data = len(self.detector["psd"]) 
         df = self.detector["freq"][1] - self.detector["freq"][0]
-        # dfs =  np.diff(self.detector["freq"])
-        # dfs = np.append(dfs, dfs[-1])
         
         sigma = 0.5 * (self.detector["psd"]**2 /df) ** (0.5)
 
@@ -153,9 +136,6 @@ class SourceData:
 
         self.noise = noise
 
-        # generate random noise from PSD
-        # self.noise = self.detector["psd"]*np.exp(1j*np.random.uniform(0,np.pi*2,N_data))*(1+np.random.uniform(np.nextafter(-1,0),1,N_data))
-        # make noise an immutable array
         self.noise.flags.writeable = False
 
     def inject_data(self, modes_data):
