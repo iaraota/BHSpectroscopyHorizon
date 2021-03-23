@@ -713,7 +713,7 @@ class Priors(SourceData):
         percent = 0.5
         M_min = self.final_mass*(1-percent)
         M_max = self.final_mass*(1+percent)
-        z_min = self.redshift/(1-percent)
+        z_min = self.redshift*(1-percent)
         z_max = self.redshift*(1+percent)
         time_scale_min = (M_min/self.mass_f)*(1 + z_min)*UnitsToSeconds.tSun
         time_scale_max = (M_max/self.mass_f)*(1 + z_max)*UnitsToSeconds.tSun
@@ -721,10 +721,10 @@ class Priors(SourceData):
         for mode in self.modes_model:
 
             if mode == self.modes_model[0]:
-                A_max = M_max*(1+z_min)/(self.luminosity_distance(z_min)*1e-3)
-                A_min = M_min*(1+z_max)/(self.luminosity_distance(z_max)*1e-3)
+                A_max = M_max*(1 + z_min)/(self.luminosity_distance(z_min)*1e-3)*10
+                A_min = M_min*(1 + z_max)/(self.luminosity_distance(z_max)*1e-3)/10
                 # A_max = 30318
-                self.prior_scale.extend(['linear', 'linear'])
+                self.prior_scale.extend(['log', 'linear'])
             else:
                 A_max = 0.9
                 A_min = 0

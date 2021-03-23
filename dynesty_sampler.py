@@ -52,7 +52,7 @@ class DynestySampler(SourceData):
             sample='rwalk',
             maxiter=10000,
             )
-        sampler.run_nested()
+        sampler.run_nested(print_progress=False)
         results = sampler.results
         logZ = results.logz[-1]
         # print(results.summary())
@@ -72,7 +72,7 @@ class DynestySampler(SourceData):
             sample='rwalk',
             # maxiter=10000,
             )
-        sampler_data.run_nested()
+        sampler_data.run_nested(print_progress=False)
         results_data = sampler_data.results
 
         logZ_data = results_data.logz[-1]
@@ -206,7 +206,7 @@ def find_logB(redshift, modes_data, modes_model, detector, mass, q):
 def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
     np.random.seed(seed)
 
-    with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "w") as myfile:
+    with open(f"data/horizon/masses/horizon_{label_data}_{label_model}_{mass}.dat", "w") as myfile:
         myfile.write(f"(0)seed(1)redshift(2)logB - mass = {mass}\n")
 
     correct = 8
@@ -214,7 +214,7 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
     # z_min, z_max = 0,0
     B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
 
-    with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+    with open(f"data/horizon/masses/horizon_{label_data}_{label_model}_{mass}.dat", "a") as myfile:
         myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
     
     if B_fac > correct*(1+error):
@@ -223,7 +223,7 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
             z_min = z0
             z0 *= 2
             B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
-            with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+            with open(f"data/horizon/masses/horizon_{label_data}_{label_model}_{mass}.dat", "a") as myfile:
                 myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
         z_max = z0
     else:
@@ -232,14 +232,14 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
             z_max = z0
             z0 /= 2
             B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
-            with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+            with open(f"data/horizon/masses/horizon_{label_data}_{label_model}_{mass}.dat", "a") as myfile:
                 myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
         z_min = z0
     if not correct*(1-error) < B_fac < correct*(1+error):
         while True:
             z0 = np.random.uniform(z_min, z_max)
             B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
-            with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+            with open(f"data/horizon/masses/horizon_{label_data}_{label_model}_{mass}.dat", "a") as myfile:
                 myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
 
             if correct*(1-error) < B_fac < correct*(1+error):
@@ -254,10 +254,7 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
 
     return (mass, z0, B_fac)
 from multiprocessing import Pool, cpu_count
-def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs=8):
-    manager = multiprocessing.Manager()
-    B_factor = manager.dict()
-    hist = []
+def compute_horizon_masses(modes_data, modes_model, detector, q):
     label_data = 'data'
     for mode in modes_data:
         label_data += '_'+mode[1]+mode[3]+mode[5]
@@ -281,26 +278,6 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs=8):
         res = pool.starmap(spectrocopy_horizon, values)
 
 
-    # processes = []
-    # j = 0
-    # while j+(num_procs-1) < len(masses):
-    #     for i in range(j,j+num_procs):
-    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
-    #         p.start()
-    #         processes.append(p)
-            
-    #     for process in processes:
-    #         process.join()
-    #     j += num_procs
-    # if j < len(masses):
-    #     for i in range(j,len(masses)):
-    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
-    #         p.start()
-    #         processes.append(p)
-            
-    #     for process in processes:
-    #         process.join()
-
 if __name__ == '__main__':
     # np.random.seed(1234)
     """GW190521
@@ -308,44 +285,19 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    # m_f = 1e3
-    # z = 0.1
-    # # z = 0.05
-    # # z = 0.01
+
     # detector = "LIGO"
     # q = 1.5
+    # m_f = 500
+    # z = 0.1
 
     # modes = ["(2,2,0)"]
-    # # modes = ["(2,2,0)", "(2,2,1) I"]
-
-    # # modes = ["(2,2,0)", "(4,4,0)"]
-    # # modes = ["(2,2,0)", "(3,3,0)"]
-    # modes_model = ["(2,2,0)"]
-    # modes_model = ["(2,2,0)", "(2,2,1) I"]
-    # # modes_model = ["(2,2,0)", "(4,4,0)"]
-    # # modes_model = ["(2,2,0)", "(3,3,0)"]
-
-
-    # # np.random.seed(9572)
+    # modes_model = ["(2,2,0)"]#, "(2,2,1) I"]
     # teste = DynestySampler(modes, modes_model, detector, m_f, z, q, "FH")
-    # model = "freq_tau"
+    # model = "kerr"
 
-    # teste.true_pars.choose_theta_true(model)
-    # teste.priors.cube_uniform_prior(model)
-    # teste.models.choose_model(model)
-    # teste.models_data.choose_model(model)
-    # print(teste.loglikelihood(teste.models.model, [600, 5.6, 200, 0.5, 0.9, 6, 2700,1.4]))
-    # print(teste.loglikelihood(teste.models_data.model, [240, 5, 1400, 1.4]))
-    # print(teste.loglikelihood(teste.models_data.model, teste.true_pars.theta_true))
-    # plt.loglog(teste.detector['freq'], np.abs(teste.data))
-    # plt.loglog(teste.detector['freq'], teste.detector['psd'])
-    # plt.loglog(teste.detector['freq'], np.abs(teste.models_data.model(teste.true_pars.theta_true)), label = 'real')
-    # # plt.legend()
-    # plt.show()
-
-    # print(teste.compute_bayes_factor('freq_tau'))
-    # teste.run_sampler('freq_tau')
-    # # teste.plot()
+    # # print(teste.compute_bayes_factor('kerr'))
+    # teste.run_sampler('kerr')
 
     # q = 1.5
     # detector = "LIGO"
@@ -366,11 +318,26 @@ if __name__ == '__main__':
 
 
 
-    masses = [50]#10**np.linspace(1, 4, 288)
-    np.random.shuffle(masses)
     modes_data = ["(2,2,0)", "(2,2,1) I"]
     modes_model = ["(2,2,0)"]
     detector = "LIGO"
     q = 1.5
-    num_procs = 1
-    compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
+    compute_horizon_masses(modes_data, modes_model, detector, q)
+
+    modes_data = ["(2,2,0)", "(4,4,0)"]
+    modes_model = ["(2,2,0)"]
+    detector = "LIGO"
+    q = 1.5
+    compute_horizon_masses(modes_data, modes_model, detector, q)
+
+    modes_data = ["(2,2,0)", "(3,3,0)"]
+    modes_model = ["(2,2,0)"]
+    detector = "LIGO"
+    q = 1.5
+    compute_horizon_masses(modes_data, modes_model, detector, q)
+
+    modes_data = ["(2,2,0)", "(2,1,0)"]
+    modes_model = ["(2,2,0)"]
+    detector = "LIGO"
+    q = 1.5
+    compute_horizon_masses(modes_data, modes_model, detector, q)
