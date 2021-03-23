@@ -199,9 +199,61 @@ def secant_method(f1, f2, x1, x2):
     x3  = (x1*f2 - x2*f1)/(f2 - f1)
     return x3
 
+def find_logB(redshift, modes_data, modes_model, detector, mass, q):
+    dy_sampler = DynestySampler(modes_data, modes_model, detector, mass, redshift, q, "FH")
+    logB = -dy_sampler.compute_bayes_factor('freq_tau')[2]
+    return logB
 
+def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
+    np.random.seed(seed)
 
-def compute_horizon_masses(masses, modes_data, modes_model, detector, q, num_procs=8):
+    with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "w") as myfile:
+        myfile.write(f"(0)seed(1)redshift(2)logB - mass = {mass}\n")
+
+    correct = 8
+    error = 0.01
+    # z_min, z_max = 0,0
+    B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
+
+    with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+        myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
+    
+    if B_fac > correct*(1+error):
+        z_min = z0
+        while B_fac > correct*(1+error):
+            z_min = z0
+            z0 *= 2
+            B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
+            with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+                myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
+        z_max = z0
+    else:
+        z_max = z0
+        while B_fac < correct*(1-error):
+            z_max = z0
+            z0 /= 2
+            B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
+            with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+                myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
+        z_min = z0
+    if not correct*(1-error) < B_fac < correct*(1+error):
+        while True:
+            z0 = np.random.uniform(z_min, z_max)
+            B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
+            with open(f"data/horizon/masses/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
+                myfile.write(f"{seed}\t{z0}\t{B_fac}\n")
+
+            if correct*(1-error) < B_fac < correct*(1+error):
+                break
+            elif B_fac > correct*(1+error):
+                z_min = z0
+            elif B_fac < correct*(1-error):
+                z_max = z0
+    
+    with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "w") as myfile:
+        myfile.write(f"{seed}\t{mass}\t{x2}\t{B_fac}\n")
+
+def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs=8):
     manager = multiprocessing.Manager()
     B_factor = manager.dict()
     hist = []
@@ -213,67 +265,19 @@ def compute_horizon_masses(masses, modes_data, modes_model, detector, q, num_pro
         label_model += '_'+mode[1]+mode[3]+mode[5]
 
 
-    seeds = np.random.randint(1,1e4, len(masses))
-
-    def spectrocopy_horizon(seed, mass, modes_data, modes_model, detector, q, label_data, label_model):
-        np.random.seed(seed)
-        def find_logB(redshift):
-            dy_sampler = DynestySampler(modes_data, modes_model, detector, mass, redshift, q, "FH")
-            logB = -dy_sampler.compute_bayes_factor('freq_tau')[2]
-            return logB - 8
-
-        with open(f"data/horizon_{mass}_{label_data}_{label_model}.dat", "w") as myfile:
-            myfile.write(f"(0)seed(1)mass(2)redshift(3)logB\n")
-        x0, x1 = [1e-2, 1]
-        correct = 8
-        error = 0.01
-
-
-        # B_fac_1 = find_logB(z1)
-        # B_fac_2 = find_logB(z2)
-        # print(B_fac)
-
-        f0 = find_logB(x0)
-        f1 = find_logB(x1)
-
-        with open(f"data/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
-            myfile.write(f"{seed}\t{mass}\t{z1}\t{B_fac_1+8}\n")
-            myfile.write(f"{seed}\t{mass}\t{z2}\t{B_fac_2+8}\n")
-        if B_fac_1+8 > correct:
-            while True:
-                x2 = x1 - f1* (x1 - x0) / float(f1 - f0)
-                
-                # z3_ind = np.random.uniform(np.log10(z1), np.log10(z2))
-                # z3 = 10**z3_ind
-                # z3 = secant_method(B_fac_1-8, B_fac_2-8, z1, z2)
-                B_fac = find_logB(x2) + 8
-                with open(f"data/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
-                    myfile.write(f"{seed}\t{mass}\t{x2}\t{B_fac}\n")
-                if correct*(1-error) < B_fac < correct*(1+error):
-                    break
-                else:
-                    x0, x1 = x1, x2
-                    f0, f1 = f1, B_fac
-                # elif B_fac < correct*(1-error):
-                #     z2 = z3
-                # elif B_fac > correct*(1+error):
-                #     z1 = z3
-
-                with open(f"data/horizon_{label_data}_{label_model}.dat", "a") as myfile:
-                    myfile.write(f"{seed}\t{mass}\t{x2}\t{B_fac}\n")
-            else:
-                with open(f"data/horizon_{mass}_{label_data}_{label_model}.dat", "a") as myfile:
-                    myfile.write(f"{seed}\t{mass}\t{x0}\t{B_fac}\n")
-
-
-    with open(f"data/horizon_{label_data}_{label_model}.dat", "w") as myfile:
+    with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "w") as myfile:
         myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB\n")
+
+    masses, redshifts = np.genfromtxt('data/horizon/rayleigh/rayleigh_horizon_1.5_LIGO_(2,2,0)+(2,2,1)_detector.dat').T
+    masses = [masses[50]]
+    redshifts = [redshifts[50]]
+    seeds = np.random.randint(1,1e4, len(masses))
 
     processes = []
     j = 0
     while j+(num_procs-1) < len(masses):
         for i in range(j,j+num_procs):
-            p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], modes_data, modes_model, detector, q, label_data, label_model))
+            p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
             p.start()
             processes.append(p)
             
@@ -282,7 +286,7 @@ def compute_horizon_masses(masses, modes_data, modes_model, detector, q, num_pro
         j += num_procs
     if j < len(masses):
         for i in range(j,len(masses)):
-            p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], modes_data, modes_model, detector, q, label_data, label_model))
+            p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
             p.start()
             processes.append(p)
             
@@ -335,30 +339,30 @@ if __name__ == '__main__':
     # teste.run_sampler('freq_tau')
     # # teste.plot()
 
-    q = 1.5
-    detector = "LIGO"
-    num_procs = 48
-    modes = ["(2,2,0)"]
-
-    modes_model = ["(2,2,0)", "(4,4,0)"]
-    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
-    
-    modes_model = ["(2,2,0)", "(2,2,1) I"]
-    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
-
-    modes_model = ["(2,2,0)", "(3,3,0)"]
-    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
-
-    modes_model = ["(2,2,0)", "(2,1,0)"]
-    one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
-
-
-
-    # masses = [50]#10**np.linspace(1, 4, 288)
-    # np.random.shuffle(masses)
-    # modes_data = ["(2,2,0)", "(2,2,1) I"]
-    # modes_model = ["(2,2,0)"]
-    # detector = "LIGO"
     # q = 1.5
-    # num_procs = 8
-    # compute_horizon_masses(masses, modes_data, modes_model, detector, q, num_procs)
+    # detector = "LIGO"
+    # num_procs = 48
+    # modes = ["(2,2,0)"]
+
+    # modes_model = ["(2,2,0)", "(4,4,0)"]
+    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+    
+    # modes_model = ["(2,2,0)", "(2,2,1) I"]
+    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+
+    # modes_model = ["(2,2,0)", "(3,3,0)"]
+    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+
+    # modes_model = ["(2,2,0)", "(2,1,0)"]
+    # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
+
+
+
+    masses = [50]#10**np.linspace(1, 4, 288)
+    np.random.shuffle(masses)
+    modes_data = ["(2,2,0)", "(2,2,1) I"]
+    modes_model = ["(2,2,0)"]
+    detector = "LIGO"
+    q = 1.5
+    num_procs = 1
+    compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
