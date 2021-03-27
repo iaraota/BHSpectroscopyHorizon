@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import pathlib
 
 # pair_plot method libs:
 from scipy.stats import gaussian_kde
@@ -96,22 +97,30 @@ class EmceeSampler(SourceData):
         self.true_pars.choose_theta_true(model)
         print(self.true_pars.theta_true)
         ndim = len(self.true_pars.theta_true)
-        self.nwalkers = 50
-        self.nsteps = 1500
-        self.thin = 30
-        # self.nwalkers = 20
-        # self.nsteps = 500
-        # self.thin = 5
+        self.nwalkers = 100
+        self.nsteps = 5000
+        self.thin = 50
+        # self.nwalkers = 50
+        # self.nsteps = 1000
+        # self.thin = 15
         # self.nwalkers = 20
         # self.nsteps = 100
         # self.thin = 15
+        min_prior = self.priors.prior_min
+        max_prior = self.priors.prior_max
 
-
-        # pos = self.prior_transform(np.random.rand(self.nwalkers, ndim))
+        # walkers near true values
         pos = (self.true_pars.theta_true + 1e-4 * np.random.randn(self.nwalkers, ndim))
+
+        # pick random initial step in log scale for amplitude
+        pos0 = 10**np.random.uniform(low = np.log10(min_prior[0]), high = np.log10(max_prior[0]), size=(self.nwalkers, 1)) 
+        pos1 = np.random.uniform(low = min_prior[1:], high = max_prior[1:], size=(self.nwalkers, ndim-1))
+
+        pos = np.append(pos0, pos1, axis = 1)
 
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.log_pdf)
         sampler.run_mcmc(pos, self.nsteps, progress=True)
+
         self.samples = sampler.get_chain()
         self.flat_samples = sampler.get_chain(discard=int(self.nsteps/2), thin=self.thin, flat=True)
 
@@ -121,6 +130,50 @@ class EmceeSampler(SourceData):
                     + str(self.final_mass) + "_" + str(self.redshift) + "_"
                     + self.detector["label"] + ".pdf", dpi = 360)
         plt.show()
+
+    def save_estimated_values_and_errors(
+        self,
+        model,
+        ):
+        # run sampler
+        self.run_sampler(model)
+
+        df_samples = pd.DataFrame(self.flat_samples, columns = self.true_pars.theta_labels_plain)
+
+        trues = {}
+        for i in range(len(self.true_pars.theta_labels_plain)):
+            trues[self.true_pars.theta_labels_plain[i]] = self.true_pars.theta_true[i]
+
+        path = 'data/samples_pars'
+        pathlib.Path(path).mkdir(parents=True, exist_ok=True) 
+        print(self.modes_data)
+        
+        label_data_modes = ''
+        for mode in self.modes_data:
+            label_data_modes = '_'+mode[1]+mode[3]+mode[5]
+            
+        label_model_modes = ''
+        for mode in self.modes_model:
+            label_model_modes = '_'+mode[1]+mode[3]+mode[5]
+
+        print(self.true_pars.theta_labels_plain)
+        for parameter in self.true_pars.theta_labels_plain:
+            file_path = f"{path}/{parameter}_data{label_data_modes}_model{label_model_modes}.dat"
+            if pathlib.Path(file_path).is_file():
+                with open(file_path, "a") as myfile:
+                    myfile.write(f"{trues[parameter]}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.95)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.05)}\n")
+            else:
+                with open(file_path, "w") as myfile:
+                    myfile.write(f"#(0)true(1)estimated(2)upper(3)lower\n")
+                    myfile.write(f"{trues[parameter]}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.95)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.05)}\n")
+
+
 
     def _compute_logpdf_function(
         self,
@@ -139,7 +192,17 @@ class EmceeSampler(SourceData):
         self.priors.uniform_prior(model)
         print(self.priors.prior_min, self.priors.prior_max)
 
-        self.log_pdf = lambda theta: MCMCFunctions.log_probability_qnm(
+        # self.log_pdf = lambda theta: MCMCFunctions.log_probability_qnm(
+        #     theta,
+        #     self.priors.prior_function,
+        #     self.models.model,
+        #     self.data,
+        #     self.detector["freq"],
+        #     self.detector["psd"]
+        #     )
+        self.log_pdf = self._log_pdf
+    def _log_pdf(self, theta):
+        return MCMCFunctions.log_probability_qnm(
             theta,
             self.priors.prior_function,
             self.models.model,
@@ -148,17 +211,15 @@ class EmceeSampler(SourceData):
             self.detector["psd"]
             )
 
-
-
 if __name__ == '__main__':
-    np.random.seed(123)
     """GW190521
     final mass = 150.3
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    m_f = 1e4
-    z = 0.1
+    # np.random.seed(9944)
+    m_f = 1284
+    z = 0.17099759466766967
     q = 1.5
 
     # m_f = 150.3
@@ -174,12 +235,12 @@ if __name__ == '__main__':
     detector = "LIGO"
     # detector = "CE"
     modes = ["(2,2,0)"]
-    # modes = ["(2,2,0)", "(2,2,1) II"]
+    modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
     # modes = ["(2,2,0)", "(4,4,0)"]
     # modes = ["(2,2,0)", "(3,3,0)"]
     modes_model = ["(2,2,0)"]
-    # modes_model = ["(2,2,0)", "(2,2,1) II"]
+    modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)", "(2,2,1) I", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
     # modes_model = ["(2,2,0)", "(4,4,0)"]
     # modes_model = ["(2,2,0)", "(3,3,0)"]
@@ -187,7 +248,8 @@ if __name__ == '__main__':
     # np.random.seed(4652)
     # m_f, z = 17.257445345175107, 9.883089941558583e-05
     teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
-    teste.run_sampler('freq_tau')
+    # teste.run_sampler('freq_tau')
+    teste.save_estimated_values_and_errors('freq_tau')
     # df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)
 
 

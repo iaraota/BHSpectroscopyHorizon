@@ -385,11 +385,14 @@ class TrueParameters(SourceData):
     def _true_freq_tau(self):
         self.theta_true = []
         self.theta_labels = []
+        self.theta_labels_plain = []
         
         for mode in self.modes_model:
             if mode != self.modes_model[0]:
                 R = self.qnm_modes[mode].amplitude/self.qnm_modes[self.modes_model[0]].amplitude
                 label_R = r"$R_{{{0}}}$".format(mode)
+                label_R_plain = f"R_{mode[1]+mode[3]+mode[5]}"
+
             else:
                 R = (
                         self.qnm_modes[mode].amplitude*
@@ -397,6 +400,7 @@ class TrueParameters(SourceData):
                         self.dist_Gpc
                     )
                 label_R = r"$A_{{{0}}}M_f(1+z)/D_L$".format(mode)
+                label_R_plain = f"A_{mode[1]+mode[3]+mode[5]}"
 
 
             self.theta_true.extend([
@@ -411,6 +415,12 @@ class TrueParameters(SourceData):
                 r"$\phi_{{{0}}}$".format(mode),
                 r"$f_{{{0}}} [Hz]$".format(mode),
                 r"$\tau_{{{0}}} [ms]$".format(mode),
+                ])
+            self.theta_labels_plain.extend([
+                label_R_plain,
+                f"phi_{mode[1]+mode[3]+mode[5]}",
+                f"freq_{mode[1]+mode[3]+mode[5]}",
+                f"tau_{mode[1]+mode[3]+mode[5]}",
                 ])
 
     def _true_kerr(self):
@@ -572,10 +582,14 @@ class Priors(SourceData):
 
         try:
             models[model]()
-            self.prior_function = lambda theta: MCMCFunctions.noninfor_log_prior(theta, self.prior_min, self.prior_max)
+            # self.prior_function = lambda theta: MCMCFunctions.noninfor_log_prior(theta, self.prior_min, self.prior_max)
+            self.prior_function = self._prior_mcmc
 
         except:
             raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
+
+    def _prior_mcmc(self,theta):
+        return MCMCFunctions.noninfor_log_prior(theta, self.prior_min, self.prior_max)
 
     def cube_uniform_prior(
         self,
@@ -602,15 +616,26 @@ class Priors(SourceData):
 
         # try:
         models[model]()
-        self.prior_function = lambda hypercube: self._hypercube_transform(
+        self.prior_function = self._prior_function
+        # self.prior_function = lambda hypercube: self._hypercube_transform(
+        #     hypercube,
+        #     self.prior_min,
+        #     self.prior_max,
+        #     self.prior_scale,
+        #     )
+
+
+        # except:
+        #     raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
+
+    def _prior_function(self, hypercube):
+        return self._hypercube_transform(
             hypercube,
             self.prior_min,
             self.prior_max,
             self.prior_scale,
             )
 
-        # except:
-        #     raise ValueError('model should be {"freq_tau", "kerr", "mass_spin", "df_dtau", "df_dtau_sub"}')
 
     def _hypercube_transform(
         self,
