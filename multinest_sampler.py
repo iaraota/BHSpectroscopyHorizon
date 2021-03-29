@@ -317,15 +317,15 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
             if z_min <= 0.01:
                 break
             z0 = np.random.uniform(z_min, z_max)
-            B_fac = find_logB(z0, modes_data, modes_model, detector, mass, q)
+            B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q)
             with open(file_path_mass, "a") as myfile:
                 myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
 
-            if lower < B_fac < upper:
+            if B_fac - B_fac_err <= correct <= B_fac + B_fac_err:
                 break
-            elif B_fac > upper:
+            elif B_fac - B_fac_err > correct:
                 z_min = z0
-            elif B_fac < lower:
+            elif B_fac + B_fac_err < correct:
                 z_max = z0
     
     with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "a") as myfile:
@@ -354,6 +354,7 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 8):
     values = [(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses))]
     np.random.shuffle(values)
 
+    values_multi = values
 
     if len(values) > num_procs:
         values_multi = values[:num_procs]
