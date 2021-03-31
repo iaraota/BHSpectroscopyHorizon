@@ -22,7 +22,7 @@ from modules import MCMCFunctions, GWFunctions
 from Models import Models, TrueParameters, Priors
 
 
-class DynestySampler(SourceData):
+class MultiNestSampler(SourceData):
     """Compute posterior probability densities for
     quasinormal modes in the frequency domain."""
 
@@ -49,7 +49,15 @@ class DynestySampler(SourceData):
         self.models.choose_model(model)
         mass = self.final_mass
         ndim = len(self.true_pars.theta_true)
-        file_path = f'data/multinest/chains/mass_{round(mass,1)}_redshift_{self.redshift}/'
+
+        label_data = 'data'
+        for mode in self.modes_data:
+            label_data += '_'+mode[1]+mode[3]+mode[5]
+        label_model = 'model'
+        for mode in self.modes_model:
+            label_model += '_'+mode[1]+mode[3]+mode[5]
+
+        file_path = f'data/multinest/chains/{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}/'
         pathlib.Path(file_path).mkdir(parents=True, exist_ok=True) 
 
         result_model = solve(
@@ -218,7 +226,7 @@ class DynestySampler(SourceData):
 
 def compute_log_B(B_fac,i,modes_data, modes_model, detector, mass, redshift, q, num, seed):#, redshift):
     np.random.seed(seed)
-    dy_sampler = DynestySampler(modes_data, modes_model, detector, mass, redshift, q, "FH")
+    dy_sampler = MultiNestSampler(modes_data, modes_model, detector, mass, redshift, q, "FH")
     logZ_model, logZ_data, logB, logBerr = dy_sampler.compute_bayes_factor('freq_tau')
 
     with open(f"data/freq_tau_histogram_{modes_data}_{modes_model}_{num}.dat", "a") as myfile:
@@ -273,15 +281,68 @@ def one_mode_bayes_histogram(modes_data, modes_model, detector, num, q, num_proc
     # plt.show()
 
 
-def find_logB(redshift, modes_data, modes_model, detector, mass, q):
-    dy_sampler = DynestySampler(modes_data, modes_model, detector, mass, redshift, q, "FH")
+def find_logB(redshift, modes_data, modes_model, detector, mass, q, noise_seed):
+    dy_sampler = MultiNestSampler(modes_data, modes_model, detector, mass, redshift, q, "FH", noise_seed)
     logZ_model, logZ_data, logB, logBerr = dy_sampler.compute_bayes_factor('freq_tau')
     return logB, logBerr
 
-def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
-    np.random.seed(seed)
 
-    file_path_mass = f"data/horizon/masses/horizon_{label_data}_{label_model}_{round(mass,1)}.dat"
+def secant(f,a,b,tol):
+    '''Approximate solution of f(x)=0 on interval [a,b] by the secant method.
+
+    Parameters
+    ----------
+    f : function
+        The function for which we are trying to approximate a solution f(x)=0.
+    a,b : numbers
+        The interval in which to search for a solution. The function returns
+        None if f(a)*f(b) >= 0 since a solution is not guaranteed.
+    tol : (positive) float
+        Tolerance for the solution.
+
+    Returns
+    -------
+    m_N : number
+        The x intercept of the secant line on the the Nth interval
+            m_n = a_n - f(a_n)*(b_n - a_n)/(f(b_n) - f(a_n))
+        The initial interval [a_0,b_0] is given by [a,b]. If f(m_n) == 0
+        for some intercept m_n then the function returns this solution.
+        If all signs of values f(a_n), f(b_n) and f(m_n) are the same at any
+        iterations, the secant method fails and return None.
+
+    '''
+
+    a_n = a
+    b_n = b
+    while True:
+        f_a_n = f(a_n)
+        f_b_n = f(b_n)
+
+        if f_a_n*f_b_n >= 0:
+            print("Secant method fails.")
+            return None
+
+        m_n = a_n - f_a_n*(b_n - a_n)/(f_b_n - f_a_n)
+        
+        f_m_n = f(m_n)
+
+        if f_a_n*f_m_n < 0:
+            a_n = a_n
+            b_n = m_n
+        elif f_b_n*f_m_n < 0:
+            a_n = m_n
+            b_n = b_n
+        elif abs(f_m_n) <= tol:
+            print("Found solution.")
+            break
+        else:
+            print("Secant method fails.")
+            return None
+    return m_n
+
+
+def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
+    file_path_mass = f"data/horizon/masses/horizon_{q}_{label_data}_{label_model}_{round(mass,1)}_{seed}.dat"
 
     with open(file_path_mass, "w") as myfile:
         myfile.write(f"#(0)seed(1)redshift(2)logB(3)logBerr - mass = {mass}\n")
@@ -290,50 +351,140 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
 
     rescale = 0.5
     # z_min, z_max = 0,0
-    B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q)
+    B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
     with open(file_path_mass, "a") as myfile:
         myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
-
-    if B_fac - B_fac_err > correct:
+    n = 1
+    if  B_fac - B_fac_err > correct:
         z_min = z0
-        while B_fac - B_fac_err > correct:
+        f_min = B_fac - 8
+        while B_fac - B_fac_err  > correct:
             z_min = z0
             z0 *= 1 + rescale
-            B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q)
+            B_fac, B_fac_err  = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+            n +=1
             with open(file_path_mass, "a") as myfile:
                 myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
         z_max = z0
-    elif z0 > 0.01:
+        f_max = B_fac - B_fac_err - 8
+
+    elif B_fac + B_fac_err < correct:
         z_max = z0
+        f_max = B_fac - 8
         while B_fac + B_fac_err < correct:
             z_max = z0
+            if z_max < 1e-2:
+                z0 = 1e-3
+                break
             z0 *= 1 - rescale
-            B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q)
+            B_fac, B_fac_err  = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+            n +=1
             with open(file_path_mass, "a") as myfile:
                 myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
         z_min = z0
-    if not B_fac - B_fac_err <= correct <= B_fac + B_fac_err:
-        while True:
-            if z_min <= 0.01:
-                break
-            z0 = np.random.uniform(z_min, z_max)
-            B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q)
-            with open(file_path_mass, "a") as myfile:
-                myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+        f_min = B_fac + B_fac_err - 8
 
-            if B_fac - B_fac_err <= correct <= B_fac + B_fac_err:
-                break
-            elif B_fac - B_fac_err > correct:
-                z_min = z0
-            elif B_fac + B_fac_err < correct:
-                z_max = z0
-    
-    with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "a") as myfile:
+
+    while not B_fac - B_fac_err <= correct <= B_fac + B_fac_err:
+        np.random.seed(None)
+        # if n > 100:
+        #     break
+        z0 = z_min - f_min*(z_max - z_min)/(f_max - f_min)
+
+        if z_max < 1e-2:
+            z0 = 1e-3
+            break
+        B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+        n +=1
+        with open(file_path_mass, "a") as myfile:
+            myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+
+        f_0 = B_fac - 8
+
+        if f_min*(f_0+B_fac_err) < 0:
+            z_max = z0
+            f_max = f_0
+        elif f_b_n*(f_0-B_fac_err) < 0:
+            z_min = z0
+            f_min = f_0
+
+    with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}_new.dat", "a") as myfile:
         myfile.write(f"{seed}\t{mass}\t{z0}\t{B_fac}\t{B_fac_err}\n")
 
     return (mass, z0, B_fac)
+
+
+def spectrocopy_horizon_rand(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
+    file_path_mass = f"data/horizon/masses/horizon_{q}_{label_data}_{label_model}_{round(mass,1)}.dat"
+
+    with open(file_path_mass, "w") as myfile:
+        myfile.write(f"#(0)seed(1)redshift(2)logB(3)logBerr - mass = {mass}\n")
+
+    correct = 8
+
+    rescale = 0.2
+    # z_min, z_max = 0,0
+    B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+    with open(file_path_mass, "a") as myfile:
+        myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+    
+    if  B_fac - B_fac_err > correct:
+        z_min = z0
+        while B_fac - B_fac_err  > correct:
+            z_min = z0
+            z0 *= 1 + rescale
+            B_fac, B_fac_err  = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+            with open(file_path_mass, "a") as myfile:
+                myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+        z_max = z0
+
+    elif B_fac + B_fac_err < correct:
+        z_max = z0
+        while B_fac + B_fac_err < correct:
+            z_max = z0
+            if z_max < 1e-2:
+                z0 = 1e-3
+                break
+            z0 *= 1 - rescale
+            B_fac, B_fac_err  = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+            with open(file_path_mass, "a") as myfile:
+                myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+        z_min = z0
+
+
+    while not B_fac - B_fac_err <= correct <= B_fac + B_fac_err:
+        np.random.seed(None)
+        if round(z_min, 3) == round(z_min, 3):
+            if B_fac - B_fac_err > correct:
+                z_max *= 1 + rescale
+            elif B_fac + B_fac_err < correct:
+                z_min *= 1 - rescale
+        z0 = np.random.uniform(z_min,z_max)
+        B_fac, B_fac_err = find_logB(z0, modes_data, modes_model, detector, mass, q, seed)
+
+        with open(file_path_mass, "a") as myfile:
+            myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+        if B_fac - B_fac_err > correct:
+            z_max = z0
+            if z_max < 1e-2:
+                z0 = 1e-3
+                break
+        elif B_fac + B_fac_err < correct:
+            z_min = z0
+
+    with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}.dat", "a") as myfile:
+        myfile.write(f"{seed}\t{mass}\t{z0}\t{B_fac}\t{B_fac_err}\n")
+
+    return (mass, z0, B_fac)
+
+
 from multiprocessing import Pool, cpu_count
-def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 8):
+
+from scipy import interpolate
+def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 7):
+    pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True) 
+    pathlib.Path('data/horizon/masses').mkdir(parents=True, exist_ok=True) 
+
     label_data = 'data'
     for mode in modes_data:
         label_data += '_'+mode[1]+mode[3]+mode[5]
@@ -342,13 +493,25 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 8):
         label_model += '_'+mode[1]+mode[3]+mode[5]
 
 
-    with open(f"data/horizon/horizon_{label_data}_{label_model}.dat", "w") as myfile:
+    with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}_new.dat", "w") as myfile:
         myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB(4)logBerr\n")
     mode1 = modes_data[0]
     mode2 = modes_data[1][:7]
-    masses, redshifts = np.genfromtxt(f'data/horizon/rayleigh/rayleigh_horizon_{q}_{detector}_{mode1}+{mode2}_detector.dat').T
-
-    seeds = np.random.randint(1,1e4, len(masses))
+    masses_rayleigh, redshifts_rayleigh = np.genfromtxt(f'data/horizon/rayleigh/rayleigh_horizon_{q}_{detector}_{mode1}+{mode2}_detector.dat').T
+    itp_rayleigh = interpolate.interp1d(
+        masses_rayleigh,
+        redshifts_rayleigh,
+        kind='cubic',
+        )
+    N = num_procs
+    masses = np.logspace(1, 3.5, N, endpoint=True)
+    redshifts = []
+    for mass in masses:
+        try: 
+            redshifts.append(itp_rayleigh(mass))
+        except:
+            redshifts.append(1e-2)
+    seeds = np.random.randint(1e3,9e3, N)
 
     # values = tuple((seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses)))
     values = [(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses))]
@@ -387,7 +550,7 @@ if __name__ == '__main__':
     # # modes = ["(2,2,0)"]
     # # modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)"]
-    # teste = DynestySampler(modes, modes_model, detector, m_f, z, q, "FH")
+    # teste = MultiNestSampler(modes, modes_model, detector, m_f, z, q, "FH")
     # model = "freq_tau"
 
     # print(teste.compute_bayes_factor('freq_tau'))
@@ -411,6 +574,19 @@ if __name__ == '__main__':
     # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
 
     num_procs = 48
+
+    # modes_data = ["(2,2,0)", "(3,3,0)"]
+    # modes_model = ["(2,2,0)"]
+    # detector = "LIGO"
+    # q = 1.5
+    # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
+
+    # modes_data = ["(2,2,0)", "(2,1,0)"]
+    # modes_model = ["(2,2,0)"]
+    # detector = "LIGO"
+    # q = 1.5
+    # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
+    
     modes_data = ["(2,2,0)", "(2,2,1) II"]
     modes_model = ["(2,2,0)"]
     detector = "LIGO"
@@ -418,18 +594,6 @@ if __name__ == '__main__':
     compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
 
     modes_data = ["(2,2,0)", "(4,4,0)"]
-    modes_model = ["(2,2,0)"]
-    detector = "LIGO"
-    q = 1.5
-    compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
-
-    modes_data = ["(2,2,0)", "(3,3,0)"]
-    modes_model = ["(2,2,0)"]
-    detector = "LIGO"
-    q = 1.5
-    compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
-
-    modes_data = ["(2,2,0)", "(2,1,0)"]
     modes_model = ["(2,2,0)"]
     detector = "LIGO"
     q = 1.5

@@ -31,7 +31,9 @@ class SourceData:
         final_mass:float,
         redshift:float,
         q_mass:float,
-        convention:str="FH"):
+        convention:str="FH",
+        noise_seed:float=None,
+        ):
 
         self.final_mass = final_mass
         self.redshift = redshift
@@ -60,7 +62,7 @@ class SourceData:
         # compute final spin in final mass units
         self.mass_initial = self.final_mass/self.mass_f
         # compute noise
-        self._random_noise()
+        self._random_noise(noise_seed)
 
         # compute tables
 
@@ -116,9 +118,13 @@ class SourceData:
             "label": detector_data["label"],
         }
 
-    def _random_noise(self):
+    def _random_noise(
+        self,
+        seed=None,
+        ):
         """Generate noise in frequency domain.
         """
+        np.random.seed(seed)
         N_data = len(self.detector["psd"]) 
         df = self.detector["freq"][1] - self.detector["freq"][0]
         
