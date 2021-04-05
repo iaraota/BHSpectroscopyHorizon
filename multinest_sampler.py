@@ -286,62 +286,7 @@ def find_logB(redshift, modes_data, modes_model, detector, mass, q, noise_seed):
     logZ_model, logZ_data, logB, logBerr = dy_sampler.compute_bayes_factor('freq_tau')
     return logB, logBerr
 
-
-def secant(f,a,b,tol):
-    '''Approximate solution of f(x)=0 on interval [a,b] by the secant method.
-
-    Parameters
-    ----------
-    f : function
-        The function for which we are trying to approximate a solution f(x)=0.
-    a,b : numbers
-        The interval in which to search for a solution. The function returns
-        None if f(a)*f(b) >= 0 since a solution is not guaranteed.
-    tol : (positive) float
-        Tolerance for the solution.
-
-    Returns
-    -------
-    m_N : number
-        The x intercept of the secant line on the the Nth interval
-            m_n = a_n - f(a_n)*(b_n - a_n)/(f(b_n) - f(a_n))
-        The initial interval [a_0,b_0] is given by [a,b]. If f(m_n) == 0
-        for some intercept m_n then the function returns this solution.
-        If all signs of values f(a_n), f(b_n) and f(m_n) are the same at any
-        iterations, the secant method fails and return None.
-
-    '''
-
-    a_n = a
-    b_n = b
-    while True:
-        f_a_n = f(a_n)
-        f_b_n = f(b_n)
-
-        if f_a_n*f_b_n >= 0:
-            print("Secant method fails.")
-            return None
-
-        m_n = a_n - f_a_n*(b_n - a_n)/(f_b_n - f_a_n)
-        
-        f_m_n = f(m_n)
-
-        if f_a_n*f_m_n < 0:
-            a_n = a_n
-            b_n = m_n
-        elif f_b_n*f_m_n < 0:
-            a_n = m_n
-            b_n = b_n
-        elif abs(f_m_n) <= tol:
-            print("Found solution.")
-            break
-        else:
-            print("Secant method fails.")
-            return None
-    return m_n
-
-
-def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
+def spectrocopy_horizon_sec_error(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
     file_path_mass = f"data/horizon/masses/horizon_{q}_{label_data}_{label_model}_{round(mass,1)}_{seed}.dat"
 
     with open(file_path_mass, "w") as myfile:
@@ -400,11 +345,11 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
             myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
 
         f_0 = B_fac - 8
-
-        if f_min*(f_0+B_fac_err) < 0:
+        
+        if f_0 > 0:
             z_max = z0
             f_max = f_0
-        elif f_b_n*(f_0-B_fac_err) < 0:
+        elif f_0 < 0:
             z_min = z0
             f_min = f_0
 
@@ -414,8 +359,8 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
     return (mass, z0, B_fac)
 
 
-def spectrocopy_horizon_rand(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
-    file_path_mass = f"data/horizon/masses/horizon_{q}_{label_data}_{label_model}_{round(mass,1)}.dat"
+def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
+    file_path_mass = f"data/horizon/masses/horizon_{q}_{label_data}_{label_model}_{round(mass,1)}_{seed}.dat"
 
     with open(file_path_mass, "w") as myfile:
         myfile.write(f"#(0)seed(1)redshift(2)logB(3)logBerr - mass = {mass}\n")
@@ -454,7 +399,12 @@ def spectrocopy_horizon_rand(seed, mass, z0, modes_data, modes_model, detector, 
 
     while not B_fac - B_fac_err <= correct <= B_fac + B_fac_err:
         np.random.seed(None)
-        if round(z_min, 3) == round(z_min, 3):
+
+        if z_max < 1e-2:
+            z0 = 1e-3
+            break
+
+        if round(float(z_min), 6) == round(float(z_max), 6):
             if B_fac - B_fac_err > correct:
                 z_max *= 1 + rescale
             elif B_fac + B_fac_err < correct:
@@ -466,13 +416,9 @@ def spectrocopy_horizon_rand(seed, mass, z0, modes_data, modes_model, detector, 
             myfile.write(f"{seed}\t{z0}\t{B_fac}\t{B_fac_err}\n")
         if B_fac - B_fac_err > correct:
             z_max = z0
-            if z_max < 1e-2:
-                z0 = 1e-3
-                break
         elif B_fac + B_fac_err < correct:
             z_min = z0
-
-    with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}.dat", "a") as myfile:
+    with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}_new.dat", "a") as myfile:
         myfile.write(f"{seed}\t{mass}\t{z0}\t{B_fac}\t{B_fac_err}\n")
 
     return (mass, z0, B_fac)
@@ -492,9 +438,10 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 7):
     for mode in modes_model:
         label_model += '_'+mode[1]+mode[3]+mode[5]
 
+    if not os.path.exists(f"data/horizon/horizon_{q}_{label_data}_{label_model}.dat"):
+        with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}.dat", "w") as myfile:
+            myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB(4)logBerr\n")
 
-    with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}_new.dat", "w") as myfile:
-        myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB(4)logBerr\n")
     mode1 = modes_data[0]
     mode2 = modes_data[1][:7]
     masses_rayleigh, redshifts_rayleigh = np.genfromtxt(f'data/horizon/rayleigh/rayleigh_horizon_{q}_{detector}_{mode1}+{mode2}_detector.dat').T
@@ -504,7 +451,7 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 7):
         kind='cubic',
         )
     N = num_procs
-    masses = np.logspace(1, 3.5, N, endpoint=True)
+    masses = np.logspace(np.log10(30), 3.5, N, endpoint=True)
     redshifts = []
     for mass in masses:
         try: 
@@ -515,24 +462,48 @@ def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 7):
 
     # values = tuple((seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses)))
     values = [(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses))]
-    np.random.shuffle(values)
+    # np.random.shuffle(values)
 
-    values_multi = values
+    i = 1#2#3#4#5#6#7#8#9#10#11#12#13#14#15#16#17#18#19#20#21#22#23#24#25#26#27#28#29#30#31#32#33#34#35#36#37#38#39#40#41#42#43#44#45#46#47#48
+    i -= 1
+    spectrocopy_horizon(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model)
 
-    if len(values) > num_procs:
-        values_multi = values[:num_procs]
+    # processes = []
+    # j = 0
+    # while j+(num_procs-1) < len(masses):
+    #     for i in range(j,j+num_procs):
+    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
+    #         p.start()
+    #         processes.append(p)
+            
+    #     for process in processes:
+    #         process.join()
+    #     j += num_procs
+    # if j < len(masses):
+    #     for i in range(j,len(masses)):
+    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
+    #         p.start()
+    #         processes.append(p)
+            
+    #     for process in processes:
+    #         process.join()
 
-    with Pool() as pool:
-        res = pool.starmap(spectrocopy_horizon, values_multi)
 
 
-    if len(values) - len(values_multi) > num_procs:
-        values_multi = values[num_procs:2*num_procs]
-    else: values_multi = values[num_procs:]
+    # values_multi = values
 
-    with Pool() as pool:
-        res = pool.starmap(spectrocopy_horizon, values_multi)
+    # if len(values) > num_procs:
+    #     values_multi = values[:num_procs]
 
+    # with Pool() as pool:
+    #     res = pool.starmap(spectrocopy_horizon, values_multi)
+
+    # if len(values) - len(values_multi) > num_procs:
+    #     values_multi = values[num_procs:2*num_procs]
+    # else: values_multi = values[num_procs:]
+
+    # with Pool() as pool:
+    #     res = pool.starmap(spectrocopy_horizon, values_multi)
 
 if __name__ == '__main__':
     """GW190521
@@ -540,7 +511,6 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    # np.random.seed(9944)
     # m_f = 150.3
     # z = 0.1
     # q = 1.5
@@ -575,24 +545,28 @@ if __name__ == '__main__':
 
     num_procs = 48
 
+    # np.random.seed(330)
     # modes_data = ["(2,2,0)", "(3,3,0)"]
     # modes_model = ["(2,2,0)"]
     # detector = "LIGO"
     # q = 1.5
     # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
 
+    # np.random.seed(210)
     # modes_data = ["(2,2,0)", "(2,1,0)"]
     # modes_model = ["(2,2,0)"]
     # detector = "LIGO"
     # q = 1.5
     # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
     
-    modes_data = ["(2,2,0)", "(2,2,1) II"]
-    modes_model = ["(2,2,0)"]
-    detector = "LIGO"
-    q = 1.5
-    compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
+    # np.random.seed(221)
+    # modes_data = ["(2,2,0)", "(2,2,1) II"]
+    # modes_model = ["(2,2,0)"]
+    # detector = "LIGO"
+    # q = 1.5
+    # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
 
+    np.random.seed(440)
     modes_data = ["(2,2,0)", "(4,4,0)"]
     modes_model = ["(2,2,0)"]
     detector = "LIGO"
