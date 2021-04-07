@@ -26,12 +26,18 @@ class MultiNestSampler(SourceData):
     """Compute posterior probability densities for
     quasinormal modes in the frequency domain."""
 
-    def __init__(self, modes_data:list, modes_model:list, *args, **kwargs):
+    def __init__(self, modes_data:list, modes_model:list, simulation:bool=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.modes_data = modes_data
         self.modes_model = modes_model
-        self.inject_data(self.modes_data) # construct self.data
+        # construct self.data
+        if simulation:
+            self.inject_data_simulation(self.modes_data)
+            print('simulation data')
+        else:
+            self.inject_data(self.modes_data) 
+            print('qnm data')
         self.models = Models(self.modes_model, *args, **kwargs)
         self.true_pars = TrueParameters(self.modes_model, *args, **kwargs)
         self.priors = Priors(self.modes_model, *args, **kwargs)
@@ -119,6 +125,7 @@ class MultiNestSampler(SourceData):
     def run_sampler(
         self,
         model:str,
+        label:str,
         ):
         from time import time               # use for timing functions
         self.true_pars.choose_theta_true(model)
@@ -127,12 +134,13 @@ class MultiNestSampler(SourceData):
         print(self.true_pars.theta_true)
         ndim = len(self.true_pars.theta_true)
         t0 = time()
+        seed = np.random.get_state()[1][0]
         result = solve(
             LogLikelihood=lambda theta: self.loglikelihood(self.models.model, theta), 
             Prior=self.priors.prior_function,
             n_dims=ndim,
             n_live_points=500,
-            outputfiles_basename='data/multinest/chains/tw-',
+            outputfiles_basename=f'data/multinest/chains/{label}-{seed}-',
             verbose=True,
             )
         t1 = time()
@@ -145,10 +153,11 @@ class MultiNestSampler(SourceData):
             print('%15s : %.3f +- %.3f' % (name, col.mean(), col.std()))
             print(f'percentil: {np.percentile(col,50)}+{np.percentile(col,90) - np.percentile(col,50)}-{np.percentile(col,10) - np.percentile(col,50)}')
         print(f'\ntotal time:{t1-t0}')
+        print('trues:', self.true_pars.theta_true)
         # make marginal plots by running:
         # $ python multinest_marginals.py chains/3-
         # For that, we need to store the parameter names:
-        corner.corner(result['samples'], quantiles=[0.05, 0.5, 0.95], show_titles=True)
+        corner.corner(result['samples'], quantiles=[0.05, 0.5, 0.95], truths=self.true_pars.theta_true,show_titles=True)
         plt.show()
 
     def loglikelihood(self, model, theta:list):
@@ -511,20 +520,23 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    # m_f = 150.3
-    # z = 0.1
-    # q = 1.5
-
-    # detector = "LIGO"
-    # modes = ["(2,2,0)", "(2,2,1) I"]
-    # # modes = ["(2,2,0)"]
-    # # modes_model = ["(2,2,0)", "(2,2,1) I"]
+    m_f = 150
+    z = 0.01
+    q = 1.5
+    # np.random.seed(1234)
+    detector = "LIGO"
+    modes = ["(2,2,0)", "(2,2,1) I"]
+    # modes = ["(2,2,0)"]
+    modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)"]
-    # teste = MultiNestSampler(modes, modes_model, detector, m_f, z, q, "FH")
-    # model = "freq_tau"
+    teste = MultiNestSampler(modes, modes_model, True, detector, m_f, z, q, "EF")
+    model = "freq_tau"
+    label = 'simulation'
+    # label = 'qnm'
 
     # print(teste.compute_bayes_factor('freq_tau'))
-    # teste.run_sampler(model)
+    teste.run_sampler(model, label)
+    
 
     # q = 1.5
     # detector = "LIGO"
@@ -543,7 +555,7 @@ if __name__ == '__main__':
     # modes_model = ["(2,2,0)", "(2,1,0)"]
     # one_mode_bayes_histogram(modes, modes_model, detector, 500, q, num_procs)
 
-    num_procs = 48
+    # num_procs = 48
 
     # np.random.seed(330)
     # modes_data = ["(2,2,0)", "(3,3,0)"]
@@ -566,9 +578,9 @@ if __name__ == '__main__':
     # q = 1.5
     # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
 
-    np.random.seed(440)
-    modes_data = ["(2,2,0)", "(4,4,0)"]
-    modes_model = ["(2,2,0)"]
-    detector = "LIGO"
-    q = 1.5
-    compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)
+    # np.random.seed(440)
+    # modes_data = ["(2,2,0)", "(4,4,0)"]
+    # modes_model = ["(2,2,0)"]
+    # detector = "LIGO"
+    # q = 1.5
+    # compute_horizon_masses(modes_data, modes_model, detector, q, num_procs)

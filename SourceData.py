@@ -3,7 +3,7 @@ import numpy as np
 from modules import GWFunctions, MCMCFunctions, ImportData, PlotFunctions
 import os
 import pandas as pd
-
+from scipy import interpolate
 class SourceData:
     """Generate waveforms, noise and injected data
     from choosen QNMs and detector in frequency domain.
@@ -43,7 +43,6 @@ class SourceData:
         
         # get QNM parameters from simulation
         self.qnm_pars, self.mass_f, self.final_spin = self.import_simulation_qnm_parameters(self.q_mass)
-        
         # import detector strain
         #self.detector = ImportData.import_detector(detector, False)
         self._import_detector_psd(detector)
@@ -73,6 +72,9 @@ class SourceData:
         self.df_a_omegas = {}
         for mode in self.qnm_modes.keys():
             self.df_a_omegas[mode] = self.create_a_over_M_omegas_dataframe(mode)
+        
+        # import simulation strain
+        self.simulation_strain_freq = self.import_simulation_strain(self.q_mass)
 
     def _compute_qnm_modes(self):
         """Comptute QNM waveforms in frequency domain.
@@ -89,6 +91,7 @@ class SourceData:
                 }
             # qnm_modes[k].qnm_t = strain_unit*qnm_modes[k].qnm_time(times/time_unit, part, "NR")
         self.qnm_modes = qnm_modes
+
     def _import_detector_psd(
         self,
         detector:str,
@@ -158,6 +161,28 @@ class SourceData:
                 self.qnm_modes[mode].qnm_f["real"]
                 + self.qnm_modes[mode].qnm_f["imag"]
             )
+    
+    def inject_data_simulation(self, modes_data):
+        """Generate data from noise and QNM waveform.
+        """
+        # d = n
+        self.data = np.copy(self.noise)
+        # d = n + modes
+        angular_mean = np.sqrt(1/5/4/np.pi)
+        # angular_mean = 1
+
+        modes = set()
+        for mode in modes_data:
+            label = f'({mode[1]},{mode[3]})'
+            modes.add(label)
+        print(modes)
+
+        for mode in modes:
+            self.data += angular_mean*(
+                self.simulation_strain_freq[mode].real
+                + self.simulation_strain_freq[mode].imag
+            )
+
 
     def transf_fit_coeff(
         self,
@@ -325,6 +350,110 @@ class SourceData:
 
         return modes, mass_f, final_spin
 
+    def import_simulation_strain(
+        self,
+        q_mass,
+        ):
+        modes = ('l2m2', 'l2m1', 'l3m3', 'l4m4')
+        dominant = 'l2m2'
+        folders_path = os.path.join(os.getcwd(), "../simulations")
+        for folders in os.listdir(folders_path):
+            if folders.find(str(q_mass)) != -1:     
+                simu_folder = folders_path+'/'+folders+'/data/waveforms/'
+
+                strain_time = {}
+                strain_freq = {}
+                for mode in modes:
+                    data = np.genfromtxt(f'{simu_folder}peak_{dominant}_{mode}.dat')
+                    mode_label = f'({mode[1]},{mode[3]})'
+
+                    # interpolate simulation fot constant step
+                    itp_time = np.linspace(10, 200, len(data[:,0])*10)
+
+                    itp_real = interpolate.InterpolatedUnivariateSpline(
+                        data[:,0],
+                        data[:,1],
+                        k=5,
+                        ext='const',
+                        )
+                    itp_imag = interpolate.InterpolatedUnivariateSpline(
+                        data[:,0],
+                        data[:,2],
+                        k=5,
+                        ext='const',
+                        )
+                    itp_real = itp_real(itp_time)
+                    itp_imag = itp_imag(itp_time)
+
+
+                    strain_time[mode_label] = pd.DataFrame(
+                        np.array([itp_time, itp_real, itp_imag]).T,
+                        columns=('time', 'real', 'imag'),
+                        )
+
+                    # take the FFT
+                    dt = itp_time[1] - itp_time[0]
+                    fs = 1/dt
+                    fft_real = np.fft.fft(itp_real)/fs
+                    fft_imag = np.fft.fft(itp_imag)/fs
+                    fft_freqs = np.fft.fftfreq(len(itp_time), dt)
+                    # shift the zero to the center
+                    fft_real = np.fft.fftshift(fft_real)
+                    fft_imag = np.fft.fftshift(fft_imag)
+                    fft_freqs = np.fft.fftshift(fft_freqs)
+                    # select positive
+                    positive = (fft_freqs>0)
+                    fft_real = fft_real[positive]
+                    fft_imag = fft_imag[positive]
+                    fft_freqs = fft_freqs[positive]
+                    # convert to SI
+                    fft_real *= self.amplitude_scale*self.time_convert
+                    fft_imag *= self.amplitude_scale*self.time_convert
+                    fft_freqs /= self.time_convert
+
+                    # interpolate fft with detector freqs
+                    itp_fftreal_re = interpolate.InterpolatedUnivariateSpline(
+                        fft_freqs,
+                        np.real(fft_real),
+                        k=1,
+                        ext='const',
+                        )
+                    itp_fftimag_re = interpolate.InterpolatedUnivariateSpline(
+                        fft_freqs,
+                        np.real(fft_imag),
+                        k=1,
+                        ext='const',
+                        )
+
+                    
+                    itp_fftreal_im = interpolate.InterpolatedUnivariateSpline(
+                        fft_freqs,
+                        np.imag(fft_real),
+                        k=1,
+                        ext='const',
+                        )
+                    itp_fftimag_im = interpolate.InterpolatedUnivariateSpline(
+                        fft_freqs,
+                        np.imag(fft_imag),
+                        k=1,
+                        ext='const',
+                        )
+
+                    itp_freqs = self.detector["freq"]
+
+                    itp_fftreal = itp_fftreal_re(itp_freqs) + 1j*itp_fftreal_im(itp_freqs) 
+                    itp_fftimag = itp_fftimag_re(itp_freqs) + 1j*itp_fftimag_im(itp_freqs) 
+
+                    strain_freq[mode_label] = pd.DataFrame(
+                        # np.array([fft_freqs, fft_real, -fft_imag]).T,
+                        np.array([itp_freqs, itp_fftreal, -itp_fftimag]).T,
+                        columns=('freqs', 'real', 'imag'),
+                        )
+                    
+
+
+        return strain_freq
+
 
     def __str__(self):
         return ('Create QNMs for a binary with:\n\t' 
@@ -349,17 +478,17 @@ class SourceData:
 if __name__ == '__main__':
 
     m_f = 500
-    z = 0.1
+    z = 0.01
     q = 1.5
     detector = "LIGO"
-    teste = SourceData(detector, m_f, z, q, "FH")
-    fits = teste.transf_fit_coeff("(2,2,0)")
-    df = teste.create_a_over_M_omegas_dataframe("(2,2,0)")
-    M, a = teste.transform_omegas_to_mass_spin(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i,df, fits)
-    omega_r, omega_i = teste.transform_mass_spin_to_omegas(teste.final_mass/teste.initial_mass, teste.final_spin, df)
-    # M, a = teste.transform_omegas_to_mass_spin(omega_r, omega_i, fits)
-    print(teste.mass_f)
-    print(teste.final_spin)
-    print(M, a)
-    print(teste.qnm_modes["(2,2,0)"].omega_r, teste.qnm_modes["(2,2,0)"].omega_i)
-    print(omega_r, omega_i)
+    teste = SourceData(detector, m_f, z, q, "EF")
+    simu = teste.import_simulation_strain(q)
+    teste.inject_data_simulation(['(2,2,0)'])
+    part = 'real'
+    import matplotlib.pyplot as plt
+    # plt.loglog(teste.detector["freq"], teste.data)
+    plt.loglog(teste.detector["freq"], np.abs(teste.qnm_modes['(2,2,0)'].qnm_f[part]+teste.qnm_modes['(2,2,1) II'].qnm_f[part]))
+    plt.loglog(teste.simulation_strain_freq["(2,2)"].freqs, np.abs(teste.simulation_strain_freq['(2,2)'][part]), '--k')
+    plt.loglog(teste.detector["freq"], np.imag(teste.qnm_modes['(2,2,0)'].qnm_f[part]+teste.qnm_modes['(2,2,1) II'].qnm_f[part]))
+    plt.loglog(teste.simulation_strain_freq["(2,2)"].freqs, np.imag(teste.simulation_strain_freq['(2,2)'][part]), '--r')
+    plt.show()
