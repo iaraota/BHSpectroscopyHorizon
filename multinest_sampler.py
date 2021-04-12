@@ -2,6 +2,8 @@ import os
 import json
 from datetime import datetime
 import pathlib
+import itertools
+
 # from mpi4py import MPI
 
 from multiprocessing import Pool, cpu_count
@@ -34,6 +36,8 @@ class MultiNestSampler(SourceData):
 
         self.modes_data = modes_data
         self.modes_model = modes_model
+        self.args = args
+        self.kwargs = kwargs
         # construct self.data
         self.inject_data(self.modes_data) 
         self.models = Models(self.modes_model, *args, **kwargs)
@@ -119,6 +123,85 @@ class MultiNestSampler(SourceData):
         )
 
         return logZ_model, logZ_data, logB, logBerr
+
+    def compute_bayes_factor_multi_modes(
+        self,
+        model:str,
+        N_modes:int=0,
+        ):
+        modes_model = self.modes_model
+        dominant_mode = modes_model[0]
+        del modes_model[0]
+        combinations = [[dominant_mode]]
+
+        if not N_modes:
+            N_modes = len(modes_model)
+
+        for i in range(1,N_modes):
+            combs = list(itertools.combinations(modes_model,i))
+            for comb in combs:
+                copy = list(comb)
+                copy.insert(0, dominant_mode)
+                combinations.append(copy)
+        del modes_model
+
+        mass = self.final_mass
+
+        label_data = 'data'
+        for mode in self.modes_data:
+            label_data += '_'+mode[1]+mode[3]+mode[5]
+
+        logZ = {}
+        logZerr = {}
+        for modes_model in combinations:
+            models = Models(modes_model, *self.args, **self.kwargs)
+            true_pars = TrueParameters(modes_model, *self.args, **self.kwargs)
+            priors = Priors(modes_model, *self.args, **self.kwargs)
+
+            true_pars.choose_theta_true(model)
+            priors.cube_uniform_prior(model)
+            models.choose_model(model)
+            ndim = len(true_pars.theta_true)
+
+            label_model = 'model'
+            key = ''
+            for mode in modes_model:
+                label_model += '_'+mode[1]+mode[3]+mode[5]
+                key += mode+'+'
+            key = key[:-1]
+
+            seed = np.random.get_state()[1][0]
+            file_path = f'data/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
+            pathlib.Path(file_path).mkdir(parents=True, exist_ok=True) 
+
+            result = solve(
+                LogLikelihood=lambda theta: self.loglikelihood(models.model, theta), 
+                Prior=priors.prior_function,
+                n_dims=ndim,
+                n_live_points=max(500, 50*ndim),
+                outputfiles_basename=file_path+'model-',
+                verbose=False,
+                )
+            n = len(modes_model)
+            try:
+                logZ[n][key] = result['logZ']
+                logZerr[n][key] = result['logZerr']
+            except:
+                logZ[n] = {key: result['logZ']}
+                logZerr[n] = {key: result['logZerr']}
+
+            del modes_model[-1]
+            del models, true_pars, priors 
+
+        logB = {}
+        logBerr = {}
+        for i in range(N_modes,1,-1):
+            g_key = max(logZ[i], key=logZ[i].get)
+            l_key = max(logZ[i-1], key=logZ[i-1].get)
+            logB[i] = logZ[i][g_key] - logZ[i-1][l_key]
+            logBerr[i] = np.sqrt(logZerr[i][g_key]**2 + logZerr[i-1][l_key]**2)
+
+        return logZ, logB, logBerr
 
     def run_sampler(
         self,
@@ -209,26 +292,98 @@ class MultiNestSampler(SourceData):
             file_path = f"{path}/{self.q_mass}_data{label_data_modes}_model{label_model_modes}_par_{parameter}.dat"
             if pathlib.Path(file_path).is_file():
                 with open(file_path, "a") as myfile:
-                    myfile.write(f"{trues[parameter]}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.95)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.05)-df_samples[parameter].quantile(.5)}\t")
                     myfile.write(f"{self.final_mass}\t")
                     myfile.write(f"{self.redshift}\t")
                     myfile.write(f"{logB}\t")
-                    myfile.write(f"{logBerr}\n")
+                    myfile.write(f"{logBerr}\t")
+                    myfile.write(f"{trues[parameter]}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.84135)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.15865)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.97725)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.2275)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.99865)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
             else:
                 with open(file_path, "w") as myfile:
-                    myfile.write(f"#(0)true(1)estimated(2)upper(3)lower(5)mass(6)redshift(7)logB(8)logBerr\n")
-                    myfile.write(f"{trues[parameter]}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.95)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.05)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"#(0)mass(1)redshift(2)logB(3)logBerr(4)true(5)estimated(50%)")
+                    myfile.write(f'(6)upper-1sigma(7)lower-1sigma(8)upper-2sigma(9)lower-2sigma(10)upper-3sigma(11)lower-3sigma\n')
                     myfile.write(f"{self.final_mass}\t")
                     myfile.write(f"{self.redshift}\t")
                     myfile.write(f"{logB}\t")
-                    myfile.write(f"{logBerr}\n")
+                    myfile.write(f"{logBerr}\t")
+                    myfile.write(f"{trues[parameter]}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.84135)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.15865)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.97725)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.2275)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.99865)-df_samples[parameter].quantile(.5)}\t")
+                    myfile.write(f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
 
+
+def multimodes_logB_redshift(mass, modes_data, modes_model, detector, q, cores = 16, z_min = 1e-2, z_max = 5e-1, N_modes=3):
+    N = cores
+    pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True) 
+    pathlib.Path('data/horizon/logB_redshift').mkdir(parents=True, exist_ok=True) 
+
+    label_data = 'data'
+    for mode in modes_data:
+        label_data += '_'+mode[1]+mode[3]+mode[5]
+    label_model = 'model'
+    for mode in modes_model:
+        label_model += '_'+mode[1]+mode[3]+mode[5]
+
+    mode_folder = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}'
+    pathlib.Path(mode_folder).mkdir(parents=True, exist_ok=True) 
+
+    if not os.path.exists(mode_folder+f"/{mass}.dat"):
+        with open(mode_folder+f"/{mass}.dat", "w") as myfile:
+            myfile.write(f"#(0)seed(1)mass(2)redshift")
+            for i in range(2, N_modes+1):
+                myfile.write(f"({1+i})logB-{i}modes({2+i})logBerr-{i}modes")
+            myfile.write("\n")
+
+    redshifts =  np.logspace(np.log10(z_min), np.log10(z_max), N, endpoint=True)
+    seeds = np.random.randint(1e3,9e3, N)
+    for i in range(len(redshifts)):
+        multi_logB_redshift(redshifts[i], modes_data, modes_model, detector, mass, q, seeds[0], N_modes)
+    # values = [(redshifts[i], modes_data, modes_model, detector, mass, q, seeds[0], N_modes) for i in range(len(redshifts))]
+
+    # with Pool(processes=cores) as pool:
+    #     res = pool.starmap(multi_logB_redshift, values)
+
+def multi_logB_redshift(redshift, modes_data, modes_model, detector, mass, q, noise_seed, N_modes):
+    label_data = 'data'
+    for mode in modes_data:
+        label_data += '_'+mode[1]+mode[3]+mode[5]
+    label_model = 'model'
+    for mode in modes_model:
+        label_model += '_'+mode[1]+mode[3]+mode[5]
+
+    file_path = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}/{mass}.dat'
+    file_path_logZ = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}/logZ-{mass}.json'
+
+    sampler = MultiNestSampler(modes_data, modes_model, detector, mass, redshift, q, "FH", noise_seed)
+    logZ, logB, logBerr = sampler.compute_bayes_factor_multi_modes('freq_tau', N_modes)
+    key_logB = sorted(list(logB.keys()))
+    with open(file_path, "a") as myfile:
+        myfile.write(f"{noise_seed}\t{mass}\t{redshift}\t")
+        for i in key_logB:
+            myfile.write(f"{logB[i]}\t{logBerr[i]}\t")
+        myfile.write("\n")
+
+    try:
+        with open(file_path_logZ) as f:
+            data = json.load(f)
+        data.update({redshift: logZ})
+    except: 
+        data = {redshift: logZ}
+
+    with open(file_path_logZ, 'w') as f:
+        json.dump(data, f)
+
+    return redshift
 
 
 def compute_log_B(B_fac,i,modes_data, modes_model, detector, mass, redshift, q, num, seed):#, redshift):
@@ -275,16 +430,6 @@ def one_mode_bayes_histogram(modes_data, modes_model, detector, num, q, num_proc
             
         for process in processes:
             process.join()
-    
-    
-    # for (key, value) in B_factor.items():
-    #     hist.append(value['logB'])
-    # # with open(f'hist_test.json', 'w') as fp:
-    # with open(f'data/freq_tau_histogram_{modes_data}_{modes_model}_{num}.json', 'w') as fp:
-    #     json.dump(B_factor._getvalue(), fp, indent=4)
-    
-    # plt.hist(hist)
-    # plt.show()
 
 def find_logB(redshift, modes_data, modes_model, detector, mass, q, noise_seed):
     dy_sampler = MultiNestSampler(modes_data, modes_model, detector, mass, redshift, q, "FH", noise_seed)
@@ -345,82 +490,6 @@ def logB_redshift(mass, modes_data, modes_model, detector, q, cores = 16, z_min 
     with Pool(processes=cores) as pool:
         res = pool.starmap(single_logB_redshift, values)
 
-    pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True) 
-    pathlib.Path('data/horizon/masses').mkdir(parents=True, exist_ok=True) 
-
-    label_data = 'data'
-    for mode in modes_data:
-        label_data += '_'+mode[1]+mode[3]+mode[5]
-    label_model = 'model'
-    for mode in modes_model:
-        label_model += '_'+mode[1]+mode[3]+mode[5]
-
-    if not os.path.exists(f"data/horizon/horizon_{q}_{label_data}_{label_model}.dat"):
-        with open(f"data/horizon/horizon_{q}_{label_data}_{label_model}.dat", "w") as myfile:
-            myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB(4)logBerr\n")
-
-    mode1 = modes_data[0]
-    mode2 = modes_data[1][:7]
-    masses_rayleigh, redshifts_rayleigh = np.genfromtxt(f'data/horizon/rayleigh/rayleigh_horizon_{q}_{detector}_{mode1}+{mode2}_detector.dat').T
-    itp_rayleigh = interpolate.interp1d(
-        masses_rayleigh,
-        redshifts_rayleigh,
-        kind='cubic',
-        )
-    N = num_procs
-    masses = np.logspace(np.log10(30), 3.5, N, endpoint=True)
-    redshifts = []
-    for mass in masses:
-        try: 
-            redshifts.append(itp_rayleigh(mass))
-        except:
-            redshifts.append(1e-2)
-    seeds = np.random.randint(1e3,9e3, N)
-
-    # values = tuple((seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses)))
-    values = [(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model) for i in range(len(masses))]
-    # np.random.shuffle(values)
-
-    i = 1#2#3#4#5#6#7#8#9#10#11#12#13#14#15#16#17#18#19#20#21#22#23#24#25#26#27#28#29#30#31#32#33#34#35#36#37#38#39#40#41#42#43#44#45#46#47#48
-    i -= 1
-    spectrocopy_horizon(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model)
-
-    # processes = []
-    # j = 0
-    # while j+(num_procs-1) < len(masses):
-    #     for i in range(j,j+num_procs):
-    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
-    #         p.start()
-    #         processes.append(p)
-            
-    #     for process in processes:
-    #         process.join()
-    #     j += num_procs
-    # if j < len(masses):
-    #     for i in range(j,len(masses)):
-    #         p = multiprocessing.Process(target=spectrocopy_horizon, args=(seeds[i], masses[i], redshifts[i], modes_data, modes_model, detector, q, label_data, label_model))
-    #         p.start()
-    #         processes.append(p)
-            
-    #     for process in processes:
-    #         process.join()
-
-
-
-    # values_multi = values
-
-    # if len(values) > num_procs:
-    #     values_multi = values[:num_procs]
-
-    # with Pool() as pool:
-    #     res = pool.starmap(spectrocopy_horizon, values_multi)
-
-    # if len(values) - len(values_multi) > num_procs:
-    #     values_multi = values[num_procs:2*num_procs]
-    # else: values_multi = values[num_procs:]
-
-    # with Pool() as pool:
-    #     res = pool.starmap(spectrocopy_horizon, values_multi)
 
 if __name__ == '__main__':
     """GW190521
@@ -428,35 +497,51 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    m_f = 150
-    z = 0.01
+    m_f = 610
+    z = 0.15
     q = 1.5
-    # np.random.seed(1234)
-    # detector = "LIGO"
-    # modes = ["(2,2,0)", "(2,2,1) I"]
-    # modes = ["(2,2,0)"]
-    # modes_model = ["(2,2,0)", "(2,2,1) I"]
+    np.random.seed(1234)
+    detector = "LIGO"
+    modes_data = ["(2,2,0)", "(2,2,1) I"]
+    modes_data = ["(2,2,0)"]
+    modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
+    modes_model = ["(2,2,0)", "(2,2,1) II", "(3,3,0)"]
     # modes_model = ["(2,2,0)"]
-    # seed = 12345
-    # teste = MultiNestSampler(modes, modes_model, True, detector, m_f, z, q, "EF", seed)
-    # model = "freq_tau"
-    # label = 'simulation'
-    # label = 'qnm'
+    seed = 12345
+    teste = MultiNestSampler(modes_data, modes_model, detector, m_f, z, q, "FH", seed)
+    model = "freq_tau"
 
-    # print(teste.compute_bayes_factor('freq_tau'))
+    # print(teste.compute_bayes_factor_multi_modes('freq_tau'))
     # teste.run_sampler(model, label)
 
-    modes_model = ["(2,2,0)"]
+    # modes_model = ["(2,2,0)"]
+    # detector = "LIGO"
+    # # modes_data = ["(2,2,0)", "(2,2,1) II"]
+    # modes_data = ["(2,2,0)", "(3,3,0)"]
+    # # modes_data = ["(2,2,0)", "(4,4,0)"]
+    # # modes_data = ["(2,2,0)", "(2,1,0)"]
+    # q = 10
+    # cores = 1
+    # z_max = 1e-1
+    # z_min = 8e-3
+    # masses = np.logspace(np.log10(80), 3.5, 40, endpoint=True)
+    # for mass in masses:
+        # logB_redshift(mass, modes_data, modes_model, detector, q, cores, z_min, z_max)
+
+
+    modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
     detector = "LIGO"
-    # modes_data = ["(2,2,0)", "(2,2,1) II"]
-    modes_data = ["(2,2,0)", "(3,3,0)"]
-    # modes_data = ["(2,2,0)", "(4,4,0)"]
-    # modes_data = ["(2,2,0)", "(2,1,0)"]
-    q = 10
-    cores = 16
-    z_max = 1e-1
+    # modes_model = ["(2,2,0)", "(2,2,1) II"]
+    modes_model = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
+    # modes_model = ["(2,2,0)", "(4,4,0)"]
+    # modes_model = ["(2,2,0)", "(2,1,0)"]
+    q = 1.5
+    cores = 1
+    z_max = 5e-1
     z_min = 8e-3
-    masses = np.logspace(np.log10(80), 3.5, 40, endpoint=True)
+    masses = np.logspace(np.log10(30), 3.5, 40, endpoint=True)
     for mass in masses:
-        logB_redshift(mass, modes_data, modes_model, detector, q, cores, z_min, z_max)
+        multimodes_logB_redshift(mass, modes_data, modes_model, detector, q, cores, z_min, z_max,3)
+        # logB_redshift(mass, modes_data, modes_model, detector, q, cores, z_min, z_max)
+
 

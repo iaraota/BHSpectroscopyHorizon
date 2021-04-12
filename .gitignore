@@ -12,3 +12,4 @@ figs/
 .ipynb_checkpoints/
 data/
 venv/
+.vscode/
