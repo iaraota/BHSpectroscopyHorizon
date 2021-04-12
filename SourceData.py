@@ -484,11 +484,11 @@ if __name__ == '__main__':
     teste = SourceData(detector, m_f, z, q, "EF")
     simu = teste.import_simulation_strain(q)
     teste.inject_data_simulation(['(2,2,0)'])
-    part = 'real'
+    part = 'imag'
     import matplotlib.pyplot as plt
     # plt.loglog(teste.detector["freq"], teste.data)
-    plt.loglog(teste.detector["freq"], np.abs(teste.qnm_modes['(2,2,0)'].qnm_f[part]+teste.qnm_modes['(2,2,1) II'].qnm_f[part]))
-    plt.loglog(teste.simulation_strain_freq["(2,2)"].freqs, np.abs(teste.simulation_strain_freq['(2,2)'][part]), '--k')
-    plt.loglog(teste.detector["freq"], np.imag(teste.qnm_modes['(2,2,0)'].qnm_f[part]+teste.qnm_modes['(2,2,1) II'].qnm_f[part]))
-    plt.loglog(teste.simulation_strain_freq["(2,2)"].freqs, np.imag(teste.simulation_strain_freq['(2,2)'][part]), '--r')
+    plt.loglog(teste.detector["freq"], np.real(teste.qnm_modes['(2,2,0)'].qnm_f[part]+teste.qnm_modes['(2,2,1) II'].qnm_f[part]))
+    plt.loglog(teste.simulation_strain_freq["(2,2)"].freqs, np.real(teste.simulation_strain_freq['(2,2)'][part]), '--k')
+    plt.loglog(teste.detector["freq"], -np.imag(teste.qnm_modes['(2,2,0)'].qnm_f[part]+teste.qnm_modes['(2,2,1) II'].qnm_f[part]))
+    plt.loglog(teste.simulation_strain_freq["(2,2)"].freqs, -np.imag(teste.simulation_strain_freq['(2,2)'][part]), '--r')
     plt.show()

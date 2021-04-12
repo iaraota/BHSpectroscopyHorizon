@@ -2,6 +2,9 @@ import os
 import json
 from datetime import datetime
 import pathlib
+# from mpi4py import MPI
+
+from multiprocessing import Pool, cpu_count
 
 import multiprocessing
 import concurrent.futures
@@ -26,18 +29,13 @@ class MultiNestSampler(SourceData):
     """Compute posterior probability densities for
     quasinormal modes in the frequency domain."""
 
-    def __init__(self, modes_data:list, modes_model:list, simulation:bool=False, *args, **kwargs):
+    def __init__(self, modes_data:list, modes_model:list, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.modes_data = modes_data
         self.modes_model = modes_model
         # construct self.data
-        if simulation:
-            self.inject_data_simulation(self.modes_data)
-            print('simulation data')
-        else:
-            self.inject_data(self.modes_data) 
-            print('qnm data')
+        self.inject_data(self.modes_data) 
         self.models = Models(self.modes_model, *args, **kwargs)
         self.true_pars = TrueParameters(self.modes_model, *args, **kwargs)
         self.priors = Priors(self.modes_model, *args, **kwargs)
@@ -63,7 +61,7 @@ class MultiNestSampler(SourceData):
         for mode in self.modes_model:
             label_model += '_'+mode[1]+mode[3]+mode[5]
 
-        file_path = f'data/multinest/chains/{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}/'
+        file_path = f'data/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}/'
         pathlib.Path(file_path).mkdir(parents=True, exist_ok=True) 
 
         result_model = solve(
@@ -208,7 +206,7 @@ class MultiNestSampler(SourceData):
             label_model_modes += '_'+mode[1]+mode[3]+mode[5]
 
         for parameter in label_pars:
-            file_path = f"{path}/data{label_data_modes}_model{label_model_modes}_par_{parameter}.dat"
+            file_path = f"{path}/{self.q_mass}_data{label_data_modes}_model{label_model_modes}_par_{parameter}.dat"
             if pathlib.Path(file_path).is_file():
                 with open(file_path, "a") as myfile:
                     myfile.write(f"{trues[parameter]}\t")
@@ -294,6 +292,60 @@ def find_logB(redshift, modes_data, modes_model, detector, mass, q, noise_seed):
     dy_sampler = MultiNestSampler(modes_data, modes_model, detector, mass, redshift, q, "FH", noise_seed)
     logZ_model, logZ_data, logB, logBerr = dy_sampler.compute_bayes_factor('freq_tau')
     return logB, logBerr
+
+def single_logB_redshift(redshift, modes_data, modes_model, detector, mass, q, noise_seed):
+
+    label_data = 'data'
+    for mode in modes_data:
+        label_data += '_'+mode[1]+mode[3]+mode[5]
+    label_model = 'model'
+    for mode in modes_model:
+        label_model += '_'+mode[1]+mode[3]+mode[5]
+
+    file_path = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}/{mass}.dat'
+
+    B_fac, B_fac_err = find_logB(redshift, modes_data, modes_model, detector, mass, q, noise_seed)
+
+    with open(file_path, "a") as myfile:
+        myfile.write(f"{noise_seed}\t{mass}\t{redshift}\t{B_fac}\t{B_fac_err}\n")
+
+    return redshift, B_fac, B_fac_err 
+
+def logB_redshift(mass, modes_data, modes_model, detector, q, cores = 16, z_min = 1e-2, z_max = 5e-1):
+    N = cores
+    pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True) 
+    pathlib.Path('data/horizon/logB_redshift').mkdir(parents=True, exist_ok=True) 
+
+    label_data = 'data'
+    for mode in modes_data:
+        label_data += '_'+mode[1]+mode[3]+mode[5]
+    label_model = 'model'
+    for mode in modes_model:
+        label_model += '_'+mode[1]+mode[3]+mode[5]
+
+    mode_folder = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}'
+    pathlib.Path(mode_folder).mkdir(parents=True, exist_ok=True) 
+
+    if not os.path.exists(mode_folder+f"/{mass}.dat"):
+        with open(mode_folder+f"/{mass}.dat", "w") as myfile:
+            myfile.write(f"#(0)seed(1)mass(2)redshift(3)logB(4)logBerr\n")
+
+    redshifts =  np.logspace(np.log10(z_min), np.log10(z_max), N, endpoint=True)
+    seeds = np.random.randint(1e3,9e3, N)
+    values = [(redshifts[i], modes_data, modes_model, detector, mass, q, seeds[0]) for i in range(len(redshifts))]
+    logB, logBerr = [], []
+
+    # processes = []
+    # for i in range(len(redshifts)):
+    #     single_logB_redshift(redshifts[i], modes_data, modes_model, detector, mass, q, seeds[0])
+    #     p = multiprocessing.Process(target=single_logB_redshift, args=(redshifts[i], modes_data, modes_model, detector, mass, q, seeds[0]))
+    #     p.start()
+    #     processes.append(p)
+        
+    # for process in processes:
+    #     process.join()
+    with Pool(processes=cores) as pool:
+        res = pool.starmap(single_logB_redshift, values)
 
 def spectrocopy_horizon_sec_error(seed, mass, z0, modes_data, modes_model, detector, q, label_data, label_model):
     file_path_mass = f"data/horizon/masses/horizon_{q}_{label_data}_{label_model}_{round(mass,1)}_{seed}.dat"
@@ -433,8 +485,6 @@ def spectrocopy_horizon(seed, mass, z0, modes_data, modes_model, detector, q, la
     return (mass, z0, B_fac)
 
 
-from multiprocessing import Pool, cpu_count
-
 from scipy import interpolate
 def compute_horizon_masses(modes_data, modes_model, detector, q, num_procs = 7):
     pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True) 
@@ -524,19 +574,33 @@ if __name__ == '__main__':
     z = 0.01
     q = 1.5
     # np.random.seed(1234)
-    detector = "LIGO"
-    modes = ["(2,2,0)", "(2,2,1) I"]
+    # detector = "LIGO"
+    # modes = ["(2,2,0)", "(2,2,1) I"]
     # modes = ["(2,2,0)"]
-    modes_model = ["(2,2,0)", "(2,2,1) I"]
+    # modes_model = ["(2,2,0)", "(2,2,1) I"]
     # modes_model = ["(2,2,0)"]
-    teste = MultiNestSampler(modes, modes_model, True, detector, m_f, z, q, "EF")
-    model = "freq_tau"
-    label = 'simulation'
+    # seed = 12345
+    # teste = MultiNestSampler(modes, modes_model, True, detector, m_f, z, q, "EF", seed)
+    # model = "freq_tau"
+    # label = 'simulation'
     # label = 'qnm'
 
     # print(teste.compute_bayes_factor('freq_tau'))
-    teste.run_sampler(model, label)
-    
+    # teste.run_sampler(model, label)
+
+    modes_model = ["(2,2,0)"]
+    detector = "LIGO"
+    # modes_data = ["(2,2,0)", "(2,2,1) II"]
+    modes_data = ["(2,2,0)", "(3,3,0)"]
+    # modes_data = ["(2,2,0)", "(4,4,0)"]
+    # modes_data = ["(2,2,0)", "(2,1,0)"]
+    q = 10
+    cores = 16
+    z_max = 1e-1
+    z_min = 8e-3
+    masses = np.logspace(np.log10(80), 3.5, 40, endpoint=True)
+    for mass in masses:
+        logB_redshift(mass, modes_data, modes_model, detector, q, cores, z_min, z_max)
 
     # q = 1.5
     # detector = "LIGO"
