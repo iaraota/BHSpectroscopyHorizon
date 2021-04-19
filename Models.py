@@ -30,6 +30,7 @@ class Models(SourceData):
 
         models = {
             "freq_tau": self.freq_tau_model,
+            "freq_tau_multi": self.freq_tau_model,
             "kerr": self.kerr_model,
             "mass_spin": self.mass_spin_model,
             "df_dtau": self.df_dtau_model,
@@ -374,6 +375,7 @@ class TrueParameters(SourceData):
             "mass_spin": self._true_mass_spin,
             "df_dtau": self._true_df_dtau,
             "freq_tau": self._true_freq_tau,
+            "freq_tau_multi": self._true_freq_tau,
             # "df_dtau_sub": self._true_df_dtau_subdominant(),
             }
 
@@ -611,6 +613,7 @@ class Priors(SourceData):
             "mass_spin": self._prior_mass_spin,
             "df_dtau": self._prior_df_dtau,
             "freq_tau": self._prior_freq_tau,
+            "freq_tau_multi": self._prior_freq_tau_multimodes,
             # "df_dtau_sub": self._prior_df_dtau_subdominant(),
             }
 
@@ -683,6 +686,67 @@ class Priors(SourceData):
             cube[i] = transform[transforms[i]](prior_min[i], prior_max[i], cube[i])
         
         return cube
+
+    def _prior_freq_tau_multimodes(self):
+        self.prior_scale = []
+        self.prior_min = []
+        self.prior_max = []
+        percent = 0.5
+        M_min = self.final_mass*(1-percent)
+        M_max = self.final_mass*(1+percent)
+
+        z_min = self.redshift*(1-percent)
+        z_max = self.redshift*(1+percent)
+
+        time_scale_min = (1 + z_min)*(M_min/self.mass_f)*UnitsToSeconds.tSun
+        time_scale_max = (1 + z_max)*(M_max/self.mass_f)*UnitsToSeconds.tSun
+
+        omegas_r = []
+        omegas_i = []
+        for (k,v) in self.qnm_modes.items():
+            if k == self.modes_model[0]:
+                pass
+            else:
+                omegas_r.append(v.omega_r)
+                omegas_i.append(v.omega_i)
+        
+        for mode in self.modes_model:
+            if mode == self.modes_model[0]:
+                A_max = M_max*(1 + z_min)/(self.luminosity_distance(z_min)*1e-3)*10
+                A_min = M_min*(1 + z_max)/(self.luminosity_distance(z_max)*1e-3)/10
+                self.prior_scale.extend(['log', 'linear', 'log', 'linear'])
+                self.prior_min.extend([
+                    A_min,
+                    0,
+                    self.qnm_modes[mode].omega_r/2/np.pi/time_scale_max,
+                    (time_scale_min/self.qnm_modes[mode].omega_i)*1e3,
+                ])
+
+                self.prior_max.extend([
+                    A_max,
+                    2*np.pi,
+                    self.qnm_modes[mode].omega_r/2/np.pi/time_scale_min,
+                    (time_scale_max/self.qnm_modes[mode].omega_i)*1e3,
+                ])
+            else:
+                A_min = 0
+                A_max = 0.9
+                self.prior_scale.extend(['linear', 'linear', 'log', 'linear'])
+
+                self.prior_min.extend([
+                    A_min,
+                    0,
+                    min(omegas_r)/2/np.pi/time_scale_max,
+                    (time_scale_min/max(omegas_i))*1e3,
+                ])
+
+                self.prior_max.extend([
+                    A_max,
+                    2*np.pi,
+                    max(omegas_r)/2/np.pi/time_scale_min,
+                    (time_scale_max/min(omegas_i))*1e3,
+                ])
+
 
     def _prior_freq_tau(self):
         self.prior_scale = []
