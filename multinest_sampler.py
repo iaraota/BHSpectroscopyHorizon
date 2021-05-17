@@ -439,7 +439,7 @@ class MultiNestSampler(SourceData):
                         f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
 
 
-def multimodes_logB_redshift(modes_data, modes_model, detector, q, cores=16):
+def multimodes_logB_redshift(modes_data, modes_model, detector, q, N_modes=2, cores=16):
     horizons_coeffs = {
         1.5: {
             2: [-0.46587733, 2.70800683, - 3.90075654, - 0.7769546],
@@ -462,7 +462,7 @@ def multimodes_logB_redshift(modes_data, modes_model, detector, q, cores=16):
 
     }
 
-    N_modes = len(modes_model)
+    # N_modes = len(modes_model)
     horizon = np.poly1d(horizons_coeffs[q][N_modes])
     masses = np.logspace(np.log10(masses_range[q][N_modes][0]), np.log10(
         masses_range[q][N_modes][1]), masses_range[q][N_modes][2], endpoint=True)
@@ -479,6 +479,8 @@ def multimodes_logB_redshift(modes_data, modes_model, detector, q, cores=16):
     )
         for mass in masses for x in np.linspace(0.5, 1.5, 10)
     ]
+    plt.loglog(masses, 10**horizon(np.log10(masses)))
+    plt.show()
 
     pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True)
     pathlib.Path(
@@ -495,7 +497,7 @@ def multimodes_logB_redshift(modes_data, modes_model, detector, q, cores=16):
         num_modes += 1
     label_model = f'model_{num_modes}_modes'
 
-    mode_folder = f'data/horizon/logB_redshift/multimode/{q}_{label_data}_{label_model}'
+    mode_folder = f'data/horizon/logB_redshift/multimode-2/{q}_{label_data}_{label_model}'
     pathlib.Path(mode_folder).mkdir(parents=True, exist_ok=True)
     for mass in masses:
         if not os.path.exists(mode_folder + f"/{mass}.dat"):
@@ -528,8 +530,8 @@ def multi_logB_redshift(redshift, modes_data, modes_model, detector, mass, q, no
         num_modes += 1
     label_model = f'model_{num_modes}_modes'
 
-    file_path = f'data/horizon/logB_redshift/multimode/{q}_{label_data}_{label_model}/{mass}.dat'
-    file_path_logZ = f'data/horizon/logB_redshift/multimode/{q}_{label_data}_{label_model}/logZ-{mass}.dat'
+    file_path = f'data/horizon/logB_redshift/multimode-2/{q}_{label_data}_{label_model}/{mass}.dat'
+    file_path_logZ = f'data/horizon/logB_redshift/multimode-2/{q}_{label_data}_{label_model}/logZ-{mass}.dat'
 
     sampler = MultiNestSampler(
         modes_data, modes_model, detector, mass, redshift, q, "FH", noise_seed)
@@ -803,12 +805,14 @@ if __name__ == '__main__':
     # multimode horizon
     modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
     detector = "LIGO"
-    modes_models = [["(2,2,0)", "(2,2,1) II"], [
-        "(2,2,0)", "(2,2,1) II", '(3,3,0)']]
-    q = 1.5
-    cores = 4
-    for model in modes_models:
-        multimodes_logB_redshift(modes_data, model, detector, q, cores)
+    modes_models = [["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
+    qs = [1.5, 10]
+    cores = 48
+    N_modes = 2
+    for q in qs:
+        for model in modes_models:
+            multimodes_logB_redshift(
+                modes_data, model, detector, q, N_modes, cores)
 
     # #histogram
 
