@@ -521,7 +521,7 @@ def multimodes_logB_redshift(modes_data, modes_model, detector, q, N_modes=2, co
         },
         10: {
             2: [5e1, 4e3, 45],
-            3: [1e2, 4e3, 40],
+            3: [1e2, 4e3, 20],
         }
 
     }
