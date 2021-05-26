@@ -5,6 +5,9 @@ import pathlib
 
 # from mpi4py import MPI
 
+import scipy.stats as stats
+from scipy import integrate
+
 from multiprocessing import Pool, cpu_count
 
 import multiprocessing
@@ -221,7 +224,7 @@ class MultiNestSampler(SourceData):
         )
 
         # Save parameters
-        self.multi_save_estimated_values_and_errors(
+        self.multi_save_injected_deviation(
             result['samples'],
             true_pars.theta_labels_plain,
             true_pars.theta_true,
@@ -229,15 +232,12 @@ class MultiNestSampler(SourceData):
             self.modes_data,
             label,
         )
-        print('teste')
-
         return result
 
     def run_sampler(
-        self,
-        model: str,
-        label: str,
-    ):
+            self,
+            model: str,
+            label: str,):
         from time import time               # use for timing functions
         self.true_pars.choose_theta_true(model)
         self.priors.cube_uniform_prior(model)
@@ -293,16 +293,15 @@ class MultiNestSampler(SourceData):
                                                 )
 
     def save_estimated_values_and_errors(
-        self,
-        samples,
-        label_pars,
-        true_pars,
-        modes_model,
-        modes_data,
-        logB,
-        logBerr,
-        label='pars'
-    ):
+            self,
+            samples,
+            label_pars,
+            true_pars,
+            modes_model,
+            modes_data,
+            logB,
+            logBerr,
+            label='pars'):
 
         df_samples = pd.DataFrame(samples, columns=label_pars)
 
@@ -369,20 +368,36 @@ class MultiNestSampler(SourceData):
                         f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
 
     def multi_save_estimated_values_and_errors(
-        self,
-        samples,
-        label_pars,
-        true_pars,
-        modes_model,
-        modes_data,
-        label='pars'
-    ):
+            self,
+            samples,
+            label_pars,
+            true_pars,
+            modes_model,
+            modes_data,
+            label='pars'):
 
         df_samples = pd.DataFrame(samples, columns=label_pars)
 
         trues = {}
         for i in range(len(label_pars)):
             trues[label_pars[i]] = true_pars[i]
+        print(trues)
+
+        trues_label = {}
+        trues_keys = {}
+        for key, value in trues.items():
+            if isinstance(value, dict):
+                trues_keys[key] = list(value.keys())
+                trues_label[key] = f'true-{trues_keys[key]}'
+            else:
+                trues_label[key] = 'true'
+
+        for key in trues_keys.keys():
+            aux = trues[key].values()
+            trues[key] = ''
+            for k in aux:
+                trues[key] += f'{k}\t'
+            trues[key] = trues[key][:-1]
 
         path = 'data/samples_pars'
         pathlib.Path(path).mkdir(parents=True, exist_ok=True)
@@ -397,46 +412,95 @@ class MultiNestSampler(SourceData):
 
         for parameter in label_pars:
             file_path = f"{path}/{label}_{self.q_mass}_data{label_data_modes}_model{label_model_modes}_par_{parameter}.dat"
-            if pathlib.Path(file_path).is_file():
+            if not pathlib.Path(file_path).is_file():
+                with open(file_path, "w") as myfile:
+                    myfile.write(
+                        f"#(0)mass(1)redshift(2){trues_label[parameter]}(3)estimated(50%)")
+                    myfile.write(
+                        f'(4)upper-1sigma(5)lower-1sigma(6)upper-2sigma(7)lower-2sigma(8)upper-3sigma(9)lower-3sigma\n')
+
+            with open(file_path, "a") as myfile:
+                myfile.write(f"{self.final_mass}\t")
+                myfile.write(f"{self.redshift}\t")
+                myfile.write(f"{trues[parameter]}\t")
+                myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
+                myfile.write(
+                    f"{df_samples[parameter].quantile(.84135)-df_samples[parameter].quantile(.5)}\t")
+                myfile.write(
+                    f"{df_samples[parameter].quantile(.15865)-df_samples[parameter].quantile(.5)}\t")
+                myfile.write(
+                    f"{df_samples[parameter].quantile(.97725)-df_samples[parameter].quantile(.5)}\t")
+                myfile.write(
+                    f"{df_samples[parameter].quantile(.2275)-df_samples[parameter].quantile(.5)}\t")
+                myfile.write(
+                    f"{df_samples[parameter].quantile(.99865)-df_samples[parameter].quantile(.5)}\t")
+                myfile.write(
+                    f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
+
+    def multi_save_injected_deviation(
+            self,
+            samples,
+            label_pars,
+            true_pars,
+            modes_model,
+            modes_data,
+            label='norm_psd'):
+
+        df_samples = pd.DataFrame(samples, columns=label_pars)
+
+        trues = {}
+        for i in range(len(label_pars)):
+            trues[label_pars[i]] = true_pars[i]
+        label_data_modes = ''
+        for mode in modes_data:
+            label_data_modes += '_' + mode[1] + mode[3] + mode[5]
+
+        label_model_modes = ''
+        for mode in modes_model:
+            label_model_modes += '_' + mode[1] + mode[3] + mode[5]
+
+        path = 'data/samples_pars/norm_psd'
+        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
+        for par in label_pars:
+            file_path = f"{path}/{label}_{self.q_mass}_data{label_data_modes}_model{label_model_modes}_par_{par}.dat"
+            pos = sorted(df_samples[par].values)
+            kde_pos = stats.gaussian_kde(pos)
+
+            errors = {}
+            if par in ['A_220', 'phi_220', 'freq_220', 'tau_220']:
+                inj_x = trues[par]
+                int_inj = integrate.quad(kde_pos, -np.inf, inj_x)[0]
+                errors['220'] = stats.norm.ppf(int_inj)
+
+                if not pathlib.Path(file_path).is_file():
+                    with open(file_path, "w") as myfile:
+                        myfile.write('#(0)mass(1)redshift(2)error-220\n')
+
                 with open(file_path, "a") as myfile:
                     myfile.write(f"{self.final_mass}\t")
                     myfile.write(f"{self.redshift}\t")
-                    myfile.write(f"{trues[parameter]}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.84135)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.15865)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.97725)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.2275)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.99865)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
+                    myfile.write(f"{errors['220']}\n")
+
             else:
-                with open(file_path, "w") as myfile:
-                    myfile.write(
-                        f"#(0)mass(1)redshift(2)logB(3)logBerr(4)true(5)estimated(50%)")
-                    myfile.write(
-                        f'(6)upper-1sigma(7)lower-1sigma(8)upper-2sigma(9)lower-2sigma(10)upper-3sigma(11)lower-3sigma\n')
-                    myfile.write(f"{self.final_mass}\t")
-                    myfile.write(f"{self.redshift}\t")
-                    myfile.write(f"{trues[parameter]}\t")
-                    myfile.write(f"{df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.84135)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.15865)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.97725)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.2275)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.99865)-df_samples[parameter].quantile(.5)}\t")
-                    myfile.write(
-                        f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
+                for mode in ['(2,2,1) II', '(3,3,0)', '(4,4,0)', '(2,1,0)', '(2,2,0)']:
+                    inj_x = trues[par][mode]
+                    int_inj = integrate.quad(
+                        kde_pos, -np.inf, inj_x)[0]
+                    errors[mode] = stats.norm.ppf(int_inj)
+
+                if not pathlib.Path(file_path).is_file():
+                    with open(file_path, "w") as myfile:
+                        myfile.write(
+                            '#(0)mass(1)redshift(2)error-221(3)error-330(4)error-440(5)error-210(6)error-220\n')
+
+                with open(file_path, 'a') as file:
+                    file.write(f'{self.final_mass}\t')
+                    file.write(f'{self.redshift}\t')
+                    file.write(f'{errors["(2,2,1) II"]}\t')
+                    file.write(f'{errors["(3,3,0)"]}\t')
+                    file.write(f'{errors["(4,4,0)"]}\t')
+                    file.write(f'{errors["(2,1,0)"]}\t')
+                    file.write(f'{errors["(2,2,0)"]}\n')
 
 
 def multimodes_logB_redshift(modes_data, modes_model, detector, q, N_modes=2, cores=16):
@@ -554,13 +618,13 @@ def multi_logB_redshift(redshift, modes_data, modes_model, detector, mass, q, no
     return redshift
 
 
-def compute_log_B(modes_data, modes_model, detector, mass, redshift, q, num, seed):
+def compute_log_B(modes_data, modes_model, detector, mass, redshift, q, seed, label='multi'):
     noise_seed = np.random.seed(seed)
 
     save_seed = np.random.get_state()[1][0]
     multi_sampler = MultiNestSampler(
         modes_data, modes_model, detector, mass, redshift, q, "FH", noise_seed)
-    result = multi_sampler.compute_parameters_multi_modes('3modes')
+    result = multi_sampler.compute_parameters_multi_modes(label)
     return result
     # with open(f"data/histogram/freq_tau_histogram_{q}_{modes_data}_{modes_model}_{num}.dat", "a") as myfile:
     #     myfile.write(
@@ -802,41 +866,80 @@ if __name__ == '__main__':
     #     logB_redshift(mass, modes_data, modes_model,
     #                   detector, q, cores, z_min, z_max)
 
-    # multimode horizon
-    modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    detector = "LIGO"
-    modes_models = [["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
-    qs = [1.5, 10]
-    cores = 48
-    N_modes = 2
-    for q in qs:
-        for model in modes_models:
-            multimodes_logB_redshift(
-                modes_data, model, detector, q, N_modes, cores)
+    # # multimode horizon
+    # modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
+    # detector = "LIGO"
+    # modes_models = [["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
+    # qs = [1.5, 10]
+    # cores = 48
+    # N_modes = 2
+    # for q in qs:
+    #     for model in modes_models:
+    #         multimodes_logB_redshift(
+    #             modes_data, model, detector, q, N_modes, cores)
 
     # #histogram
 
-    # # #parameters multimode horizon
-    # modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    # # ,["(2,2,0)", "(3,3,0)"], ["(2,2,0)", "(4,4,0)"], ["(2,2,0)", "(2,1,0)"]]
-    # modes_models = [["(2,2,0)", "(2,2,1) II"], ["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
-    # detector = "LIGO"
-    # num = 500
-    # qs = [1.5, 10]
-    # cores = 4
-    # for q in qs:
-    #     for modes_model in modes_models:
-    #         label_data = 'logZ: ' + modes_data[0]
-    #         label_model = 'logZ:'
-    #         for mode in modes_model:
-    #             label_model += ' ' + mode
-    #         data = np.genfromtxt(
-    #             'data/horizon/multimode_bayes/horizon_1.5_multimodes.dat')
-    #         masses = data[:, 0]
-    #         redshifts = data[:, 1]
-    #         seeds = np.random.randint(1, 1e4, len(data))
+    # #parameters multimode horizon
+    modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
+    # ,["(2,2,0)", "(3,3,0)"], ["(2,2,0)", "(4,4,0)"], ["(2,2,0)", "(2,1,0)"]]
+    modes_models = [["(2,2,0)", "(2,2,1) II"], [
+        "(2,2,0)", "(2,2,1) II", '(3,3,0)']]
+    detector = "LIGO"
+    qs = [1.5, 10]
+    cores = 1
+    horizons_coeffs = {
+        1.5: {
+            2: [-0.42087011, 2.27776219, - 2.6453478, - 1.91044062],
+            3: [-0.29792073, 1.37664448, - 0.54110655, - 3.89201678],
+        },
+        # TODO: NEED TO UPDATE q = 10 values!
+        10: {
+            2: [-0.16837121, 0.2268148, 2.54345812, -6.3327004],
+            3: [-0.75199848, 4.87464029, -9.19930238, 2.57682028],
+        }
+    }
 
-    #         values = [(modes_data, modes_model, detector, masses[i],
-    #                    redshifts[i], q, num, seeds[i]) for i in range(len(redshifts))]
-    #         with Pool(processes=cores) as pool:
-    #             res = pool.starmap(compute_log_B, values)
+    masses_range = {
+        1.5: {
+            2: [3e1, 5e3, 50],
+            3: [8e1, 4e3, 45],
+        },
+        10: {
+            2: [6e1, 3.5e3, 45],
+            3: [2e2, 3e3, 30],
+
+        }
+    }
+    N_permass = 100
+
+    for q in qs:
+        for modes_model in modes_models:
+            N_modes = len(modes_model)
+            horizon = np.poly1d(horizons_coeffs[q][N_modes])
+
+            label_data = 'logZ: ' + modes_data[0]
+            label_model = 'logZ:'
+
+            for mode in modes_model:
+                label_model += ' ' + mode
+
+            masses = np.logspace(np.log10(masses_range[q][N_modes][0]), np.log10(
+                masses_range[q][N_modes][1]), masses_range[q][N_modes][2], endpoint=True)
+            values = [(
+                modes_data,
+                modes_model,
+                detector,
+                mass,
+                10**horizon(np.log10(mass)),
+                q,
+                np.random.randint(x, 1e4),
+                f'{N_modes}_modes',
+            )
+                for mass in masses for x in [1] * N_permass
+            ]
+            # values = [(modes_data, modes_model, detector, masses[i],
+            #            redshifts[i], q, num, seeds[i], f'{N_modes}_modes') for i in range(len(redshifts))]
+
+            with Pool(processes=cores) as pool:
+                res = pool.starmap(compute_log_B, values)
