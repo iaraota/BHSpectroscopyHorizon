@@ -36,7 +36,7 @@ def compute_normalized_posterior():
                        'lower-3sigma',
                        )
     qs = [1.5]
-    N_modes = [2]
+    N_modes = [3]
     pars = {
         2: [
             'A_220',
@@ -90,43 +90,46 @@ def compute_normalized_posterior():
                 for sampler_folder in sampler_folders:
                     posteriors_file = sampler_folder + '/multi-post_equal_weights.dat'
                     posteriors = np.genfromtxt(posteriors_file)
-                    df_samples = pd.DataFrame(
-                        posteriors, columns=pars[N_mode] + ['logZ'])
+                    try:
+                        df_samples = pd.DataFrame(
+                            posteriors, columns=pars[N_mode] + ['logZ'])
+                        for par in pars[N_mode]:
+                            df_inj_new = df_inj[par][round(
+                                df_inj[par]['mass'], 1) == mass]
+                            pos = sorted(df_samples[par].values)
+                            kde_pos = stats.gaussian_kde(pos)
 
-                    for par in pars[N_mode]:
-                        df_inj_new = df_inj[par][round(
-                            df_inj[par]['mass'], 1) == mass]
-                        pos = sorted(df_samples[par].values)
-                        kde_pos = stats.gaussian_kde(pos)
-
-                        xs = np.linspace(min(pos), max(pos))
-                        errors = {}
-                        if par in ['A_220', 'phi_220', 'freq_220', 'tau_220']:
-                            inj_x = df_inj_new['220'].values[0]
-                            int_inj = integrate.quad(
-                                kde_pos, -np.inf, inj_x)[0]
-                            errors['220'] = stats.norm.ppf(int_inj)
-
-                            with open(save_path + save_file[par], 'a') as file:
-                                file.write(f'{mass}\t')
-                                file.write(f'{redshift}\t')
-                                file.write(f'{errors["220"]}\n')
-
-                        else:
-                            for mode in ['221', '330', '440', '210', '220']:
-                                inj_x = df_inj_new[mode].values[0]
+                            xs = np.linspace(min(pos), max(pos))
+                            errors = {}
+                            if par in ['A_220', 'phi_220', 'freq_220', 'tau_220']:
+                                inj_x = df_inj_new['220'].values[0]
                                 int_inj = integrate.quad(
                                     kde_pos, -np.inf, inj_x)[0]
-                                errors[mode] = stats.norm.ppf(int_inj)
+                                errors['220'] = stats.norm.ppf(int_inj)
 
-                            with open(save_path + save_file[par], 'a') as file:
-                                file.write(f'{mass}\t')
-                                file.write(f'{redshift}\t')
-                                file.write(f'{errors["221"]}\t')
-                                file.write(f'{errors["330"]}\t')
-                                file.write(f'{errors["440"]}\t')
-                                file.write(f'{errors["210"]}\t')
-                                file.write(f'{errors["220"]}\n')
+                                with open(save_path + save_file[par], 'a') as file:
+                                    file.write(f'{mass}\t')
+                                    file.write(f'{redshift}\t')
+                                    file.write(f'{errors["220"]}\n')
+
+                            else:
+                                for mode in ['221', '330', '440', '210', '220']:
+                                    inj_x = df_inj_new[mode].values[0]
+                                    int_inj = integrate.quad(
+                                        kde_pos, -np.inf, inj_x)[0]
+                                    errors[mode] = stats.norm.ppf(int_inj)
+
+                                with open(save_path + save_file[par], 'a') as file:
+                                    file.write(f'{mass}\t')
+                                    file.write(f'{redshift}\t')
+                                    file.write(f'{errors["221"]}\t')
+                                    file.write(f'{errors["330"]}\t')
+                                    file.write(f'{errors["440"]}\t')
+                                    file.write(f'{errors["210"]}\t')
+                                    file.write(f'{errors["220"]}\n')
+
+                    except:
+                        pass
 
 
 compute_normalized_posterior()

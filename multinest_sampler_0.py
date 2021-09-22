@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 import pathlib
+import time
 
 # from mpi4py import MPI
 
@@ -22,7 +23,8 @@ import dynesty
 from dynesty import utils as dyfunc
 from pymultinest.solve import solve
 import pymultinest
-pathlib.Path('data/multinest/chains').mkdir(parents=True, exist_ok=True)
+pathlib.Path(
+    '/discover/nobackup/cchirent/multinest/chains').mkdir(parents=True, exist_ok=True)
 
 from SourceData import SourceData
 from modules import MCMCFunctions, GWFunctions
@@ -68,7 +70,7 @@ class MultiNestSampler(SourceData):
         for mode in self.modes_model:
             label_model += '_' + mode[1] + mode[3] + mode[5]
 
-        file_path = f'data/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
+        file_path = f'/discover/nobackup/cchirent/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
         pathlib.Path(file_path).mkdir(parents=True, exist_ok=True)
 
         result_model = solve(
@@ -79,6 +81,7 @@ class MultiNestSampler(SourceData):
             n_live_points=500,
             outputfiles_basename=file_path + 'model-',
             verbose=False,
+            use_MPI=False,
         )
         logZ_model = result_model['logZ']
         logZerr_model = result_model['logZerr']
@@ -97,6 +100,7 @@ class MultiNestSampler(SourceData):
             n_live_points=500,
             outputfiles_basename=file_path + 'data-',
             verbose=False,
+            use_MPI=False,
         )
         logZ_data = result_data['logZ']
         logZerr_data = result_data['logZerr']
@@ -161,7 +165,7 @@ class MultiNestSampler(SourceData):
             label_model = f'model_{n}modes'
 
             seed = np.random.get_state()[1][0]
-            file_path = f'data/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
+            file_path = f'/discover/nobackup/cchirent/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
             pathlib.Path(file_path).mkdir(parents=True, exist_ok=True)
 
             result = solve(
@@ -172,6 +176,7 @@ class MultiNestSampler(SourceData):
                 n_live_points=max(500, 50 * ndim),
                 outputfiles_basename=file_path + 'model-',
                 verbose=False,
+                use_MPI=False,
             )
             logZ[n] = result['logZ']
             logZerr[n] = result['logZerr']
@@ -210,8 +215,10 @@ class MultiNestSampler(SourceData):
         label_model = f'model_{n}'
 
         seed = np.random.get_state()[1][0]
-        file_path = f'data/multinest/chains/pars_{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
+        file_path = f'/discover/nobackup/cchirent/multinest/chains/pars_{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
         pathlib.Path(file_path).mkdir(parents=True, exist_ok=True)
+
+        start_time = time.time()
 
         result = solve(
             LogLikelihood=lambda theta: self.loglikelihood(
@@ -221,9 +228,10 @@ class MultiNestSampler(SourceData):
             n_live_points=max(500, 50 * ndim),
             outputfiles_basename=file_path + 'multi-',
             verbose=False,
-            # use_MPI=False,
+            use_MPI=False,
         )
 
+        end_time = time.time()
         # Save parameters
         self.multi_save_injected_deviation(
             result['samples'],
@@ -233,6 +241,20 @@ class MultiNestSampler(SourceData):
             self.modes_data,
             label,
         )
+
+        path_data = 'data/'
+        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
+
+        file_path_time = f"{path_data}/elapsed_time.dat"
+        if pathlib.Path(file_path_time).is_file():
+            with open(file_path_time, "w") as myfile:
+                myfile.write(f"#(0)mass(1)redshift(2)elapsed_time\n")
+
+        with open(file_path_time, "w") as myfile:
+            myfile.write(f"{self.final_mass}\t")
+            myfile.write(f"{self.redshift}\t")
+            myfile.write(f"{end_time - start_time}\n")
+
         return result
 
     def run_sampler(
@@ -253,8 +275,9 @@ class MultiNestSampler(SourceData):
             Prior=self.priors.prior_function,
             n_dims=ndim,
             n_live_points=500,
-            outputfiles_basename=f'data/multinest/chains/{label}-{seed}-',
+            outputfiles_basename=f'/discover/nobackup/cchirent/multinest/chains/{label}-{seed}-',
             verbose=True,
+            use_MPI=False,
         )
         t1 = time()
         print()
@@ -472,17 +495,6 @@ class MultiNestSampler(SourceData):
                 inj_x = trues[par]
                 int_inj = integrate.quad(kde_pos, -np.inf, inj_x)[0]
                 errors['220'] = stats.norm.ppf(int_inj)
-                if par[:3] == 'phi':
-                    inj_x_phi = trues[par]
-                    if inj_x_phi < np.pi:
-                        inj_x_phi += 2 * np.pi
-                    else:
-                        inj_x_phi -= 2 * np.pi
-                    int_inj_phi = integrate.quad(
-                        kde_pos, -np.inf, inj_x_phi)[0]
-                    errors_phi = stats.norm.ppf(int_inj_phi)
-                    if abs(errors_phi) < abs(errors['220']):
-                        errors['220'] = errors_phi
 
                 if not pathlib.Path(file_path).is_file():
                     with open(file_path, "w") as myfile:
@@ -499,17 +511,6 @@ class MultiNestSampler(SourceData):
                     int_inj = integrate.quad(
                         kde_pos, -np.inf, inj_x)[0]
                     errors[mode] = stats.norm.ppf(int_inj)
-                    if par[:3] == 'phi':
-                        inj_x_phi = trues[par][mode]
-                        if inj_x_phi < np.pi:
-                            inj_x_phi += 2 * np.pi
-                        else:
-                            inj_x_phi -= 2 * np.pi
-                        int_inj_phi = integrate.quad(
-                            kde_pos, -np.inf, inj_x_phi)[0]
-                        errors_phi = stats.norm.ppf(int_inj_phi)
-                        if abs(errors_phi) < abs(errors[mode]):
-                            errors[mode] = errors_phi
 
                 if not pathlib.Path(file_path).is_file():
                     with open(file_path, "w") as myfile:
@@ -544,7 +545,7 @@ def multimodes_logB_redshift(modes_data, modes_model, detector, q, N_modes=2, co
         },
         10: {
             2: [5e1, 4e3, 45],
-            3: [1e2, 4e3, 40],
+            3: [1e2, 4e3, 20],
         }
 
     }
@@ -772,16 +773,16 @@ def sample_parameters(cores=4):
     # fitted coefficients 2 modes bayes horizon
     horizons_coeffs = {
         1.5: {
-            '(2,2,1) II': [-0.66852311,  4.05036508, -6.80452328,  1.26800471],
-            '(3,3,0)': [-0.72984323,  4.60837898, -8.3414624,   2.31768849],
-            '(4,4,0)': [-0.58874309,  3.88021218, -7.19144783,  1.32087045],
-            '(2,1,0)': [-2.21026510e-03, -1.31642774e+00,  7.05973356e+00, -1.10706091e+01],
+            '(2,2,1) II': [-0.59790336,  3.51790636, - 5.48829357,  0.19168019],
+            '(3,3,0)': [-0.53512716,  3.10947882, - 4.57448291, - 0.74713459],
+            '(4,4,0)': [-0.50520507,  3.16990084, - 5.20025844, - 0.50965154],
+            '(2,1,0)': [-0.07565346, - 0.48994185,  4.24017978, - 8.06686243],
         },
         10: {
-            '(2,2,1) II': [-0.86209342, 5.76135278, -11.65082754, 4.88450789],
-            '(3,3,0)': [-0.95259347, 6.1709775, -12.13801787, 5.37319762],
-            '(4,4,0)': [-1.13283604, 7.85887465, -16.92973514, 9.46422891],
-            '(2,1,0)': [28.36790612, -219.14865875, 564.00716773, -485.62649979],
+            '(2,2,1) II': [-0.92650429,   6.49717926, - 14.184255,     7.6065047],
+            '(3,3,0)': [-0.79401161,  4.97300019, - 9.17977374,  2.98709633],
+            '(4,4,0)': [-0.86390609,   5.71336636, - 11.27759125,   4.55742276],
+            '(2,1,0)': [4.27004559, - 35.63003256,  98.30067291, - 91.76135004],
         }
     }
     masses_range = {
@@ -849,129 +850,74 @@ def sample_parameters(cores=4):
 
 
 if __name__ == '__main__':
-    # sample_parameters()
-    """GW190521
-    final mass = 150.3
-    redshift = 0.72
-    spectrocopy horizon = 0.148689
-    """
-    m_f = 156.3
-    z = 0.64
-    q = 1.5
-    # np.random.seed(1234)
-    detector = "LIGO"
-    modes_data = ["(2,2,0)", "(2,2,1) I"]
-    # modes_data = ["(2,2,0)"]
+    # #parameters multimode horizon
     modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    modes_model = ["(2,2,0)", "(2,2,1) II"]
-    # modes_model = ["(2,2,0)"]
-    seed = 12345
-    teste = MultiNestSampler(modes_data, modes_model,
-                             detector, m_f, z, q, "FH", seed)
+    # ,["(2,2,0)", "(3,3,0)"], ["(2,2,0)", "(4,4,0)"], ["(2,2,0)", "(2,1,0)"]]
+    modes_models = [["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
+    detector = "CE"
+    qs = [1.5]
+    cores = 1
+    horizons_coeffs = {
+        1.5: {
+            2: [-0.42378303, 2.22119101, - 2.34699946, - 2.22674388],
+            3: [-0.30219477, 1.38081955, - 0.4938548, - 3.95842648],
+        },
+        10: {
+            2: [-0.11210798, 0.22803465, 3.71644785, -7.29147623],
+            3: [-0.70892573, 4.50109537, -8.15164046, 1.62887952],
+        }
+    }
 
-    print(teste.compute_bayes_factor_multi_modes(2))
-    # label = 'teste'
-    # teste.run_sampler(model, label)
+    masses_range = {
+        1.5: {
+            2: [3e1, 5e3, 10],
+            3: [8e1, 4e3, 10],
+        },
+        10: {
+            2: [6e1, 3.5e3, 10],
+            3: [2e2, 3e3, 10],
 
-    # modes_model = ["(2,2,0)"]
-    # detector = "LIGO"
-    # modes_data = ["(2,2,0)", "(2,2,1) II"]
-    # # modes_data = ["(2,2,0)", "(3,3,0)"]
-    # # modes_data = ["(2,2,0)", "(4,4,0)"]
-    # # modes_data = ["(2,2,0)", "(2,1,0)"]
-    # q = 1.5
-    # cores = 4
-    # z_max = 1e-1
-    # z_min = 8e-3
-    # masses = np.logspace(np.log10(80), 3.5, 40, endpoint=True)
-    # num = 25
-    # for mass in masses:
-    #     logB_redshift(mass, modes_data, modes_model,
-    #                   detector, q, cores, z_min, z_max)
+        }
+    }
+    N_permass = 1
 
-    # # multimode horizon
-    # modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    # detector = "LIGO"
-    # modes_models = [["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
-    # qs = [1.5, 10]
-    # cores = 48
-    # N_modes = 2
-    # for q in qs:
-    #     for model in modes_models:
-    #         multimodes_logB_redshift(
-    #             modes_data, model, detector, q, N_modes, cores)
+    for q in qs:
+        for modes_model in modes_models:
+            N_modes = len(modes_model)
+            horizon = np.poly1d(horizons_coeffs[q][N_modes])
 
-    # #histogram
+            label_data = 'logZ: ' + modes_data[0]
+            label_model = 'logZ:'
 
-    # # #parameters multimode horizon
-    # modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    # # ,["(2,2,0)", "(3,3,0)"], ["(2,2,0)", "(4,4,0)"], ["(2,2,0)", "(2,1,0)"]]
-    # # , ["(2,2,0)", "(2,2,1) II", '(3,3,0)']]
-    # modes_models = [["(2,2,0)", "(2,2,1) II"]]#, '(3,3,0)']]
-    # detector = "LIGO"
-    # qs = [10]
-    # cores = 1  # 64
-    # horizons_coeffs = {
-    #     1.5: {
-    #         2: [-0.42378303, 2.22119101, - 2.34699946, - 2.22674388],
-    #         3: [-0.30219477, 1.38081955, - 0.4938548, - 3.95842648],
-    #     },
-    #     10: {
-    #         2: [-0.11210798, - 0.22803465, 3.71644785, -7.29147623],
-    #         3: [-0.70892573, 4.50109537, -8.15164046, 1.62887952],
-    #     }
-    # }
+            for mode in modes_model:
+                label_model += ' ' + mode
 
-    # masses_range = {
-    #     1.5: {
-    #         2: [3e1, 5e3, 10],
-    #         3: [8e1, 4e3, 10],
-    #     },
-    #     10: {
-    #         2: [6e1, 3.5e3, 10],
-    #         3: [2e2, 3e3, 10],
+            masses = np.logspace(np.log10(masses_range[q][N_modes][0]), np.log10(
+                masses_range[q][N_modes][1]), masses_range[q][N_modes][2], endpoint=True)
 
-    #     }
-    # }
-    # N_permass = 100
+            masses = [masses[0]]
+            # masses = [masses[1]]
+            # masses = [masses[2]]
+            # masses = [masses[3]]
+            # masses = [masses[4]]
+            # masses = [masses[5]]
+            # masses = [masses[6]]
+            # masses = [masses[7]]
+            # masses = [masses[8]]
+            # masses = [masses[9]]
 
-    # for q in qs:
-    #     for modes_model in modes_models:
-    #         N_modes = len(modes_model)
-    #         horizon = np.poly1d(horizons_coeffs[q][N_modes])
+            values = [(
+                modes_data,
+                modes_model,
+                detector,
+                mass,
+                10**horizon(np.log10(mass)),
+                q,
+                np.random.randint(x, 1e4),
+                f'{N_modes}_modes',
+            )
+                for mass in masses for x in [1] * N_permass
+            ]
 
-    #         label_data = 'logZ: ' + modes_data[0]
-    #         label_model = 'logZ:'
-
-    #         for mode in modes_model:
-    #             label_model += ' ' + mode
-
-    #         masses = np.logspace(np.log10(masses_range[q][N_modes][0]), np.log10(
-    #             masses_range[q][N_modes][1]), masses_range[q][N_modes][2], endpoint=False)
-    #         masses = [masses[0]]
-    #         # masses = [masses[1]]
-    #         # masses = [masses[2]]
-    #         # masses = [masses[3]]
-    #         # masses = [masses[4]]
-    #         # masses = [masses[5]]
-    #         # masses = [masses[6]]
-    #         # masses = [masses[7]]
-    #         # masses = [masses[8]]
-    #         # masses = [masses[9]]
-    #         values = [(
-    #             modes_data,
-    #             modes_model,
-    #             detector,
-    #             mass,
-    #             10**horizon(np.log10(mass)),
-    #             q,
-    #             np.random.randint(x, 1e4),
-    #             f'{N_modes}_modes',
-    #         )
-    #             for mass in masses for x in [1] * N_permass
-    #         ]
-    #         # values = [(modes_data, modes_model, detector, masses[i],
-    #         #            redshifts[i], q, num, seeds[i], f'{N_modes}_modes') for i in range(len(redshifts))]
-
-    #         with Pool(processes=cores) as pool:
-    #             res = pool.starmap(compute_log_B, values)
+            with Pool(processes=cores) as pool:
+                res = pool.starmap(compute_log_B, values)

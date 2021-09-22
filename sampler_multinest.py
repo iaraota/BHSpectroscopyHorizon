@@ -104,25 +104,71 @@ class MultiNestSampler(SourceData):
         logB = logZ_data - logZ_model
         logBerr = np.sqrt(logZerr_data**2 + logZerr_model**2)
 
-        # Save parameters
-        self.save_estimated_values_and_errors(
+        # Save parameters model
+        self.two_modes_save_injected_deviation(
             result_model['samples'],
             self.true_pars.theta_labels_plain,
             self.true_pars.theta_true,
             self.modes_model,
             self.modes_data,
-            logB,
-            logBerr,
+            'tests',
         )
-
-        self.save_estimated_values_and_errors(
+        # Save parameters ata
+        self.two_modes_save_injected_deviation(
             result_data['samples'],
             self.true_pars_data.theta_labels_plain,
             self.true_pars_data.theta_true,
             self.modes_data,
             self.modes_data,
-            logB,
-            logBerr,
+            'tests',
+        )
+        return logZ_model, logZ_data, logB, logBerr
+
+    def compute_errors(
+        self,
+        model: str,
+        seed=np.random.get_state()[1][0],
+    ):
+        self.true_pars.choose_theta_true(model)
+        self.priors.cube_uniform_prior(model)
+        self.models.choose_model(model)
+        mass = self.final_mass
+        ndim = len(self.true_pars.theta_true)
+
+        label_data = 'data'
+        for mode in self.modes_data:
+            label_data += '_' + mode[1] + mode[3] + mode[5]
+        label_model = 'model'
+        for mode in self.modes_model:
+            label_model += '_' + mode[1] + mode[3] + mode[5]
+
+        file_path = f'data/multinest/chains/{self.q_mass}_{label_data}_{label_model}_mass_{round(mass,1)}_redshift_{self.redshift}_seed_{seed}/'
+        pathlib.Path(file_path).mkdir(parents=True, exist_ok=True)
+
+        self.true_pars_data.choose_theta_true(model)
+        self.priors_data.cube_uniform_prior(model)
+        self.models_data.choose_model(model)
+
+        ndim_data = len(self.true_pars_data.theta_true)
+
+        result_data = solve(
+            LogLikelihood=lambda theta: self.loglikelihood(
+                self.models_data.model, theta),
+            Prior=self.priors_data.prior_function,
+            n_dims=ndim_data,
+            n_live_points=500,
+            outputfiles_basename=file_path + 'data-',
+            verbose=False,
+        )
+
+        # Save parameters model
+        self.two_modes_save_injected_deviation(
+            result_data['samples'],
+            self.true_pars_data.theta_labels_plain,
+            self.true_pars_data.theta_true,
+            self.modes_model,
+            self.modes_data,
+            'tests',
         )
 
         return logZ_model, logZ_data, logB, logBerr
@@ -243,7 +289,14 @@ class MultiNestSampler(SourceData):
         self.true_pars.choose_theta_true(model)
         self.priors.cube_uniform_prior(model)
         self.models.choose_model(model)
+
+        print('prior min:')
+        print(self.priors.prior_min)
+        print('prior max:')
+        print(self.priors.prior_max)
+        print('true pars: ')
         print(self.true_pars.theta_true)
+
         ndim = len(self.true_pars.theta_true)
         t0 = time()
         seed = np.random.get_state()[1][0]
@@ -263,9 +316,12 @@ class MultiNestSampler(SourceData):
         print('parameter values:')
         parameters = self.true_pars.theta_labels_plain
         for name, col in zip(parameters, result['samples'].transpose()):
-            print('%15s : %.3f +- %.3f' % (name, col.mean(), col.std()))
+            print('\n %15s : %.3f +- %.3f' % (name, col.mean(), col.std()))
             print(
-                f'percentil: {np.percentile(col,50)}+{np.percentile(col,90) - np.percentile(col,50)}-{np.percentile(col,10) - np.percentile(col,50)}')
+                f'percentil 90: {np.percentile(col,50)}+{np.percentile(col,90) - np.percentile(col,50)}-{np.percentile(col,10) - np.percentile(col,50)}')
+
+            print(
+                f'sigma: {np.percentile(col,50)}+{np.percentile(col,84.135) - np.percentile(col,50)}-{np.percentile(col,15.865) - np.percentile(col,50)}')
         print(f'\ntotal time:{t1-t0}')
         print('trues:', self.true_pars.theta_true)
         # make marginal plots by running:
@@ -274,6 +330,11 @@ class MultiNestSampler(SourceData):
         corner.corner(result['samples'], quantiles=[
                       0.05, 0.5, 0.95], truths=self.true_pars.theta_true, show_titles=True)
         # plt.show()
+
+        print('prior min:')
+        print(self.priors.prior_min)
+        print('prior max:')
+        print(self.priors.prior_max)
 
     def loglikelihood(self, model, theta: list):
         """Generate the likelihood function for QNMs.
@@ -437,6 +498,60 @@ class MultiNestSampler(SourceData):
                     f"{df_samples[parameter].quantile(.99865)-df_samples[parameter].quantile(.5)}\t")
                 myfile.write(
                     f"{df_samples[parameter].quantile(.00135)-df_samples[parameter].quantile(.5)}\n")
+
+    def two_modes_save_injected_deviation(
+            self,
+            samples,
+            label_pars,
+            true_pars,
+            modes_model,
+            modes_data,
+            label='tests'):
+
+        df_samples = pd.DataFrame(samples, columns=label_pars)
+
+        trues = {}
+        for i in range(len(label_pars)):
+            trues[label_pars[i]] = true_pars[i]
+
+        label_data_modes = ''
+        for mode in modes_data:
+            label_data_modes += '_' + mode[1] + mode[3] + mode[5]
+
+        label_model_modes = ''
+        for mode in modes_model:
+            label_model_modes += '_' + mode[1] + mode[3] + mode[5]
+
+        path = 'data/samples_pars'
+        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
+        for par in label_pars:
+            file_path = f"{path}/{label}_{self.q_mass}_data{label_data_modes}_model{label_model_modes}_par_{par}.dat"
+            pos = sorted(df_samples[par].values)
+            kde_pos = stats.gaussian_kde(pos)
+
+            inj_x = trues[par]
+            int_inj = integrate.quad(kde_pos, -np.inf, inj_x)[0]
+            errors = stats.norm.ppf(int_inj)
+            if par[:3] == 'phi':
+                inj_x_phi = trues[par]
+                if inj_x_phi < np.pi:
+                    inj_x_phi += 2 * np.pi
+                else:
+                    inj_x_phi -= 2 * np.pi
+                int_inj_phi = integrate.quad(
+                    kde_pos, -np.inf, inj_x_phi)[0]
+                errors_phi = stats.norm.ppf(int_inj_phi)
+                if abs(errors_phi) < abs(errors):
+                    errors = errors_phi
+
+            if not pathlib.Path(file_path).is_file():
+                with open(file_path, "w") as myfile:
+                    myfile.write('#(0)mass(1)redshift(2)error\n')
+
+            with open(file_path, "a") as myfile:
+                myfile.write(f"{self.final_mass}\t")
+                myfile.write(f"{self.redshift}\t")
+                myfile.write(f"{errors}\n")
 
     def multi_save_injected_deviation(
             self,
@@ -715,7 +830,7 @@ def single_logB_redshift(redshift, modes_data, modes_model, detector, mass, q, n
     for mode in modes_model:
         label_model += '_' + mode[1] + mode[3] + mode[5]
 
-    file_path = f'data/horizon/logB_redshift/new_{q}_{label_data}_{label_model}/{mass}.dat'
+    file_path = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}/{mass}.dat'
 
     B_fac, B_fac_err = find_logB(
         redshift, modes_data, modes_model, detector, mass, q, noise_seed)
@@ -784,25 +899,26 @@ def sample_parameters(cores=4):
             '(2,1,0)': [28.36790612, -219.14865875, 564.00716773, -485.62649979],
         }
     }
+    N_points = 2
     masses_range = {
         1.5: {
-            '(2,2,1) II': [4e1, 4e3, 40],
-            '(3,3,0)': [6e1, 4e3, 36],
-            '(4,4,0)': [1e2, 5e3, 30],
-            '(2,1,0)': [1e2, 2e3, 22],
+            '(2,2,1) II': [4e1, 4e3, N_points],
+            '(3,3,0)': [6.5e1, 4e3, N_points],
+            '(4,4,0)': [1.5e2, 5e3, N_points],
+            '(2,1,0)': [1.5e2, 1.5e3, N_points],
         },
         10: {
-            '(2,2,1) II': [1e2, 2e3, 22],
-            '(3,3,0)': [7e1, 3e3, 32],
-            '(4,4,0)': [1e2, 3e3, 24],
-            '(2,1,0)': [2.5e2, 4.5e2, 10],
+            '(2,2,1) II': [1.5e2, 2.5e3, N_points],
+            '(3,3,0)': [7e1, 2.5e3, N_points],
+            '(4,4,0)': [1e2, 3e3, N_points],
+            # '(2,1,0)': [2.5e2, 4.5e2, 10],
         }
 
     }
 
     modes_model = ["(2,2,0)"]
     detector = "LIGO"
-    modes = ['(3,3,0)', '(4,4,0)', '(2,1,0)', '(2,2,1) II', ]
+    modes = ['(2,2,1) II', '(3,3,0)', '(4,4,0)', '(2,1,0)', ]
     qs = [1.5, 10]
     for q in qs:
         for mode in modes:
@@ -820,7 +936,7 @@ def sample_parameters(cores=4):
                 label_model += '_' + \
                     mode_model[1] + mode_model[3] + mode_model[5]
 
-            mode_folder = f'data/horizon/logB_redshift/new_{q}_{label_data}_{label_model}'
+            mode_folder = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}'
             pathlib.Path(mode_folder).mkdir(parents=True, exist_ok=True)
 
             horizon = np.poly1d(horizons_coeffs[q][mode])
@@ -848,6 +964,57 @@ def sample_parameters(cores=4):
                 res = pool.starmap(single_logB_redshift, values)
 
 
+def compute_redshifts_logB(cores=4):
+    mass = 156.3
+    red_max = 0.64
+    red_min = 1e-2
+    N_points = 1
+    redshifts = np.linspace(red_min, red_max, num=N_points, endpoint=True)
+
+    modes_model = ["(2,2,0)"]
+    detector = "CE"
+    modes = ['(2,2,1) II']
+    qs = [1.5]
+    for q in qs:
+        for mode in modes:
+            modes_data = ["(2,2,0)", mode]
+
+            pathlib.Path('data/horizon').mkdir(parents=True, exist_ok=True)
+            pathlib.Path(
+                'data/horizon/logB_redshift').mkdir(parents=True, exist_ok=True)
+
+            label_data = 'data'
+            for mode_data in modes_data:
+                label_data += '_' + mode_data[1] + mode_data[3] + mode_data[5]
+            label_model = 'model'
+            for mode_model in modes_model:
+                label_model += '_' + \
+                    mode_model[1] + mode_model[3] + mode_model[5]
+
+            mode_folder = f'data/horizon/logB_redshift/{q}_{label_data}_{label_model}'
+            pathlib.Path(mode_folder).mkdir(parents=True, exist_ok=True)
+
+            seeds = np.random.randint(1e3, 9e3, 10000)
+            values = [(
+                redshift,
+                modes_data,
+                modes_model,
+                detector,
+                mass,
+                q,
+                np.random.choice(seeds)
+            )
+                for redshift in redshifts
+            ]
+            if not os.path.exists(mode_folder + f"/{mass}.dat"):
+                with open(mode_folder + f"/{mass}.dat", "w") as myfile:
+                    myfile.write(
+                        f"#(0)seed(1)mass(2)redshift(3)logB(4)logBerr\n")
+
+            with Pool(processes=cores) as pool:
+                res = pool.starmap(single_logB_redshift, values)
+
+
 if __name__ == '__main__':
     # sample_parameters()
     """GW190521
@@ -855,21 +1022,38 @@ if __name__ == '__main__':
     redshift = 0.72
     spectrocopy horizon = 0.148689
     """
-    m_f = 156.3
-    z = 0.64
-    q = 1.5
-    # np.random.seed(1234)
-    detector = "LIGO"
-    modes_data = ["(2,2,0)", "(2,2,1) I"]
-    # modes_data = ["(2,2,0)"]
-    modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
-    modes_model = ["(2,2,0)", "(2,2,1) II"]
-    # modes_model = ["(2,2,0)"]
-    seed = 12345
-    teste = MultiNestSampler(modes_data, modes_model,
-                             detector, m_f, z, q, "FH", seed)
+    compute_redshifts_logB(1)
 
-    print(teste.compute_bayes_factor_multi_modes(2))
+    # events = {
+    #     'GW150914': {
+    #         'final_mass': 63.1,
+    #         'redshift': 0.09,
+    #         'redshift': 0.02,
+    #         'redshift': 0.02 * 0.5,
+    #     },
+    #     'GW190521': {
+    #         'final_mass': 156.3,
+    #         'redshift': 0.64,
+    #         'redshift': 0.06,
+    #         'redshift': 0.06 * 0.5,
+    #     },
+    # }
+
+    # m_f = 63.1
+    # z = 0.02
+    # q = 1.5
+    # # np.random.seed(1234)
+    # detector = "LIGO"
+    # modes_data = ["(2,2,0)", "(2,2,1) I"]
+    # # modes_data = ["(2,2,0)"]
+    # # modes_data = ["(2,2,0)", "(2,2,1) II", "(3,3,0)", "(4,4,0)", "(2,1,0)"]
+    # modes_model = ["(2,2,0)", "(2,2,1) II"]
+    # # modes_model = ["(2,2,0)"]
+    # # seed = 12345
+    # # for _ in range(6):
+    # teste = MultiNestSampler(modes_data, modes_model,
+    #                          detector, m_f, z, q, "FH")
+    # print(teste.run_sampler('freq_tau', 'GW150914_horizon'))
     # label = 'teste'
     # teste.run_sampler(model, label)
 
@@ -913,12 +1097,13 @@ if __name__ == '__main__':
     # cores = 1  # 64
     # horizons_coeffs = {
     #     1.5: {
-    #         2: [-0.42378303, 2.22119101, - 2.34699946, - 2.22674388],
-    #         3: [-0.30219477, 1.38081955, - 0.4938548, - 3.95842648],
+    #         2: [-0.42087011, 2.27776219, - 2.6453478, - 1.91044062],
+    #         3: [-0.29792073, 1.37664448, - 0.54110655, - 3.89201678],
     #     },
+    #     # TODO: NEED TO UPDATE q = 10 values!
     #     10: {
-    #         2: [-0.11210798, - 0.22803465, 3.71644785, -7.29147623],
-    #         3: [-0.70892573, 4.50109537, -8.15164046, 1.62887952],
+    #         2: [-0.16837121, 0.2268148, 2.54345812, -6.3327004],
+    #         3: [-0.75199848, 4.87464029, -9.19930238, 2.57682028],
     #     }
     # }
 

@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 import pathlib
+from multiprocessing import Pool
 
 # pair_plot method libs:
 from scipy.stats import gaussian_kde
@@ -98,7 +99,7 @@ class EmceeSampler(SourceData):
         print(self.true_pars.theta_true)
         ndim = len(self.true_pars.theta_true)
         self.nwalkers = 100
-        self.nsteps = 5000
+        self.nsteps = 2000
         self.thin = 50
         # self.nwalkers = 50
         # self.nsteps = 1000
@@ -118,17 +119,18 @@ class EmceeSampler(SourceData):
 
         pos = np.append(pos0, pos1, axis = 1)
 
-        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.log_pdf)
-        sampler.run_mcmc(pos, self.nsteps, progress=True)
+        with Pool() as pool:
+            sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.log_pdf, pool=pool)
+            sampler.run_mcmc(pos, self.nsteps, progress=True)
 
         self.samples = sampler.get_chain()
         self.flat_samples = sampler.get_chain(discard=int(self.nsteps/2), thin=self.thin, flat=True)
 
         corner.corner(self.flat_samples, truths=self.true_pars.theta_true, labels = self.true_pars.theta_labels)
 
-        plt.savefig("figs/corner/"+str(model)+str(len(self.modes_data))+"data"+str(len(self.modes_model))+"model"
-                    + str(self.final_mass) + "_" + str(self.redshift) + "_"
-                    + self.detector["label"] + ".pdf", dpi = 360)
+        # plt.savefig("figs/corner/"+str(model)+str(len(self.modes_data))+"data"+str(len(self.modes_model))+"model"
+        #             + str(self.final_mass) + "_" + str(self.redshift) + "_"
+        #             + self.detector["label"] + ".pdf", dpi = 360)
         plt.show()
 
     def save_estimated_values_and_errors(
@@ -218,8 +220,8 @@ if __name__ == '__main__':
     spectrocopy horizon = 0.148689
     """
     # np.random.seed(9944)
-    m_f = 1284
-    z = 0.17099759466766967
+    m_f = 63.1
+    z = 0.01
     q = 1.5
 
     # m_f = 150.3
@@ -248,8 +250,8 @@ if __name__ == '__main__':
     # np.random.seed(4652)
     # m_f, z = 17.257445345175107, 9.883089941558583e-05
     teste = EmceeSampler(modes, modes_model, detector, m_f, z, q, "FH")
-    # teste.run_sampler('freq_tau')
-    teste.save_estimated_values_and_errors('freq_tau')
+    teste.run_sampler('freq_tau')
+    # teste.save_estimated_values_and_errors('freq_tau')
     # df = pd.DataFrame(teste.flat_samples, columns=teste.true_pars.theta_labels)
 
 

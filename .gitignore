@@ -13,3 +13,4 @@ figs/
 data/
 venv/
 .vscode/
+.idea/
